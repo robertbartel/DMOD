@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from dmod.communication.scheduler_request import SchedulerRequestMessage
+from dmod.communication import SchedulerRequestMessage
 from enum import Enum
-from typing import List, Optional, Union
+from typing import List, Optional, TYPE_CHECKING, Union
 from uuid import UUID
 
-from dmod.scheduler.rsa_key_pair import RsaKeyPair
-from dmod.scheduler.resources.resource_allocation import ResourceAllocation
+from ..resources import ResourceAllocation
+
+if TYPE_CHECKING:
+    from .. import RsaKeyPair
 
 
 class JobAllocationParadigm(Enum):
@@ -297,6 +299,11 @@ class JobStatus(Enum):
 class Job(ABC):
     """
     An abstract interface for a job performed by the MaaS system.
+
+    Instances of job objects are equal as long as they both have the same ::attribute:`job_id`.  Implementations that
+    need different a separate domain of ids must create this by controlling job id values in some structural way.
+
+    The hash value of a job is calculated as the hash of it's ::attribute:`job_id`.
     """
 
     def __eq__(self, other):
@@ -304,6 +311,9 @@ class Job(ABC):
             return self.job_id == other.job_id
         else:
             return other.__eq__(self)
+
+    def __hash__(self):
+        return hash(self.job_id)
 
     @property
     @abstractmethod
@@ -411,14 +421,14 @@ class Job(ABC):
 
     @property
     @abstractmethod
-    def rsa_key_pair(self) -> Optional[RsaKeyPair]:
+    def rsa_key_pair(self) -> Optional['RsaKeyPair']:
         """
-        The ::class:`RsaKeyPair` for this job's shared SSH RSA keys.
+        The ::class:`'RsaKeyPair'` for this job's shared SSH RSA keys.
 
         Returns
         -------
-        Optional[RsaKeyPair]
-            The ::class:`RsaKeyPair` for this job's shared SSH RSA keys, or ``None`` if not has been set.
+        Optional['RsaKeyPair']
+            The ::class:`'RsaKeyPair'` for this job's shared SSH RSA keys, or ``None`` if not has been set.
         """
         pass
 
@@ -433,6 +443,11 @@ class Job(ABC):
         JobStatus
             The ::class:`JobStatus` of this object.
         """
+        pass
+
+    @status.setter
+    @abstractmethod
+    def status(self, status: JobStatus):
         pass
 
     @property
@@ -467,7 +482,9 @@ class Job(ABC):
 
 class JobImpl(Job):
     """
-    Basic implementation of ::class:`Job`.
+    Basic implementation of ::class:`Job`
+
+    Job ids are simply the string cast of generated UUID values, stored within the ::attribute:`job_uuid` property.
     """
     def __init__(self, cpu_count: int, memory_size: int, parameters: dict, allocation_paradigm_str: str,
                  alloc_priority: int = 0):
@@ -586,11 +603,11 @@ class JobImpl(Job):
         return self._parameters
 
     @property
-    def rsa_key_pair(self) -> Optional[RsaKeyPair]:
+    def rsa_key_pair(self) -> Optional['RsaKeyPair']:
         return self._rsa_key_pair
 
     @rsa_key_pair.setter
-    def rsa_key_pair(self, key_pair: RsaKeyPair):
+    def rsa_key_pair(self, key_pair: 'RsaKeyPair'):
         self._rsa_key_pair = key_pair
         self._reset_last_updated()
 
