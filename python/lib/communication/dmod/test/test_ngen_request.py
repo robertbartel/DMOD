@@ -39,8 +39,7 @@ class TestNGENRequest(unittest.TestCase):
                 'hydrofabric_data_id': '9876543210',
                 'hydrofabric_uid': '0123456789',
                 'bmi_config_data_id': '02468',
-                'config_data_id': '02468',
-                'version': 4.0
+                'config_data_id': '02468'
             },
             'session-secret': 'f21f27ac3d443c0948aab924bddefc64891c455a756ca77a4d86ec2f697cd13c'
         })
@@ -50,12 +49,14 @@ class TestNGENRequest(unittest.TestCase):
                         hydrofabric_uid="0123456789",
                         hydrofabric_data_id='9876543210',
                         bmi_cfg_data_id='02468',
-                        cfg_data_id='02468'))
+                        config_data_id='02468'))
 
         # Example 1 - like example 0, but with the object initialized with specific catchment subset
         time_range = create_time_range('2022-01-01 00:00:00', '2022-04-01 00:00:00')
         cat_ids_list = ['cat-1', 'cat-2', 'cat-3']
         cat_ids_str = '["{}", "{}", "{}"]'.format(*cat_ids_list)
+        #cat_ids_list = ['cat-1', 'cat-2', 'cat-3']
+        #cat_ids_list = []
         self.time_ranges.append(time_range)
         self.request_strings.append(
             '{"model": '
@@ -71,8 +72,7 @@ class TestNGENRequest(unittest.TestCase):
                 'hydrofabric_uid': '0123456789',
                 'config_data_id': '02468',
                 'bmi_config_data_id': '02468',
-                'catchments': cat_ids_list,
-                'version': 4.0
+                'catchments': cat_ids_list
             },
             'session-secret': 'f21f27ac3d443c0948aab924bddefc64891c455a756ca77a4d86ec2f697cd13c'
         })
@@ -81,7 +81,7 @@ class TestNGENRequest(unittest.TestCase):
                         time_range=time_range,
                         hydrofabric_uid="0123456789",
                         hydrofabric_data_id='9876543210',
-                        cfg_data_id='02468',
+                        config_data_id='02468',
                         bmi_cfg_data_id='02468',
                         catchments=cat_ids_list))
 
