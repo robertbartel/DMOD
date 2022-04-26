@@ -2,6 +2,47 @@
 
 DOCKER_DESKTOP_OS_NAME="Docker Desktop"
 
+# $1 is the Stack service name
+# $2 (optional) is the service replica number (defaults to the first; i.e., '1')
+docker_dev_get_stack_service_task_name()
+{
+    echo "${1:?No service name given when requesting service task id}.${2:-1}"
+}
+
+# Output the id of a running Docker service task instance (i.e. something associated with a container)
+# $1 is the Docker Stack name
+# $2 is the Stack service name
+# $3 (optional) is the service replica number (defaults to the first; i.e., '1')
+docker_dev_get_stack_service_task_id()
+{
+    # Service task name is just <stack_name><service_name>.<replica_number>
+    docker stack ps --no-trunc \
+        ${1:?No stack name given when requesting service task id} \
+        -f desired-state=running \
+        -f name="$(docker_dev_get_stack_service_task_name ${@:2})" \
+        -q
+}
+
+# Get the id of the actual Docker container for a running service task instance
+# $1 is the Docker Stack name
+# $2 is the Stack service name
+# $3 (optional) is the service replica number (defaults to the first; i.e., '1')
+docker_dev_get_stack_service_task_container_name()
+{
+    # Container name is just <service_task_name>.<service_task_id>
+    echo "$(docker_dev_get_stack_service_task_name ${@:2}).$(docker_dev_get_stack_service_task_id ${@})"
+}
+
+# Get the id of the actual Docker container for a running service task instance
+# $1 is the Docker Stack name
+# $2 is the Stack service name
+# $3 (optional) is the service replica number (defaults to the first; i.e., '1')
+docker_dev_get_stack_service_task_container_id()
+{
+    docker ps -f name="$(docker_dev_get_stack_service_task_container_name ${@})" -q
+
+}
+
 docker_dev_init_swarm_network()
 {
     # 1 - network name
