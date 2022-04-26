@@ -216,6 +216,49 @@ class DatasetExternalClient(DatasetClient,
             #logger.info("Session Info Return: {}".format(tmp))
             return tmp
 
+    def _process_data_download_iteration(self, raw_received_data: str) -> Tuple[bool, Union[DataTransmitMessage, MaaSDatasetManagementResponse]]:
+        """
+        Helper function for processing a single iteration of the process of downloading data.
+
+        Function process the received param, assumed to be received from the data service via a websocket connection,
+        by loading it to JSON and attempting to deserialize it, first to a ::class:`MaaSDatasetManagementResponse`, then
+        to a ::class:`DataTransmitMessage`.  If both fail, a ::class:`MaaSDatasetManagementResponse` indicating failure
+        is created.
+
+        To minimize later processing, a tuple is instead returned, containing not only the obtained message, but also
+        whether it contains transmitted data.  Note that the obtained message is the second tuple item.
+
+        Parameters
+        ----------
+        raw_received_data : str
+            The raw message text data, received over a websocket connection to the data service, expected to be either a
+            serialized ::class:`DataTransmitMessage` or ::class:`MaaSDatasetManagementResponse`.
+
+        Returns
+        -------
+        Tuple[bool, Union[DataTransmitMessage, MaaSDatasetManagementResponse]]
+            A tuple of whether the returned message for data transmission (i.e., contains data) and a returned message
+            that either contains download data or is a management response indicating the download process is finished.
+        """
+        try:
+            received_as_json = json.loads(raw_received_data)
+        except:
+            received_as_json = ''
+
+        # Try to deserialize to this type 1st; if message is something else (e.g., more data), we'll get None,
+        #   but if message deserializes to this kind of object, then this will be the last (and only) message
+        received_message = MaaSDatasetManagementResponse.factory_init_from_deserialized_json(received_as_json)
+        if received_message is not None:
+            return False, received_message
+        # If this wasn't deserialized to a response before, and wasn't to a data transmit just now, then bail
+        received_message = DataTransmitMessage.factory_init_from_deserialized_json(received_as_json)
+        if received_message is None:
+            message_obj = MaaSDatasetManagementResponse(success=False, action=ManagementAction.REQUEST_DATA,
+                                                        reason='Unparseable Message')
+            return False, message_obj
+        else:
+            return True, received_message
+
     def _update_after_valid_response(self, response: MaaSDatasetManagementResponse):
         """
         Perform any required internal updates immediately after a request gets back a successful, valid response.
@@ -250,6 +293,51 @@ class DatasetExternalClient(DatasetClient,
                                                dataset_name=name)
         self.last_response = await self.async_make_request(request)
         return self.last_response is not None and self.last_response.success
+
+    async def download_dataset(self, dataset_name: str, dest_dir: Path) -> bool:
+        await self._async_acquire_session_info()
+        try:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+        except:
+            return False
+        success = True
+        query = DatasetQuery(query_type=QueryType.LIST_FILES)
+        request = MaaSDatasetManagementMessage(action=ManagementAction.QUERY, dataset_name=dataset_name, query=query,
+                                               session_secret=self.session_secret)
+        self.last_response: MaaSDatasetManagementResponse = await self.async_make_request(request)
+        for item, dest in [(filename, dest_dir.joinpath(filename)) for filename in self.last_response.query_results]:
+            dest.parent.mkdir(exist_ok=True)
+            success = success and await self.download_from_dataset(dataset_name=dataset_name, item_name=item, dest=dest)
+        return success
+
+    async def download_from_dataset(self, dataset_name: str, item_name: str, dest: Path) -> bool:
+        await self._async_acquire_session_info()
+        if dest.exists():
+            return False
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+        except:
+            return False
+
+        request = MaaSDatasetManagementMessage(action=ManagementAction.REQUEST_DATA, dataset_name=dataset_name,
+                                               session_secret=self.session_secret, data_location=item_name)
+        async with websockets.connect(self.endpoint_uri, ssl=self.client_ssl_context) as websocket:
+            # Do this once outside loop, so we don't open a file for writing to which nothing is written
+            await websocket.send(str(request))
+            has_data, message_object = self._process_data_download_iteration(await websocket.recv())
+            if not has_data:
+                return message_object
+
+            # Here, we will have our first piece of data to write, so open file and start our loop
+            with dest.open('w') as file:
+                while True:
+                    file.write(message_object.data)
+                    # Do basically same as above, except here send message to acknowledge data just written was received
+                    await websocket.send(str(DataTransmitResponse(success=True, reason='Data Received',
+                                                                  series_uuid=message_object.series_uuid)))
+                    has_data, message_object = self._process_data_download_iteration(await websocket.recv())
+                    if not has_data:
+                        return message_object
 
     async def list_datasets(self, category: Optional[DataCategory] = None) -> List[str]:
         await self._async_acquire_session_info()
