@@ -2,8 +2,9 @@ from abc import ABC, abstractmethod
 from dmod.communication import InternalServiceClient, MaasRequestClient, ManagementAction
 from dmod.communication.client import R
 from dmod.communication.dataset_management_message import DatasetManagementMessage, DatasetManagementResponse, \
-    MaaSDatasetManagementMessage, MaaSDatasetManagementResponse
-from dmod.core.meta_data import DataCategory
+    MaaSDatasetManagementMessage, MaaSDatasetManagementResponse, QueryType, DatasetQuery
+from dmod.communication.data_transmit_message import DataTransmitMessage, DataTransmitResponse
+from dmod.core.meta_data import DataCategory, DataDomain
 from pathlib import Path
 from typing import List, Optional, Tuple, Type, Union
 
@@ -97,6 +98,39 @@ class DatasetInternalClient(DatasetClient, InternalServiceClient[DatasetManageme
         request = DatasetManagementMessage(action=ManagementAction.DELETE, dataset_name=name)
         self.last_response = await self.async_make_request(request)
         return self.last_response is not None and self.last_response.success
+
+    async def download_dataset(self, dataset_name: str, dest_dir: Path) -> bool:
+        try:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+        except:
+            return False
+        success = True
+        query = DatasetQuery(query_type=QueryType.LIST_FILES)
+        request = DatasetManagementMessage(action=ManagementAction.QUERY, dataset_name=dataset_name, query=query)
+        self.last_response: DatasetManagementResponse = await self.async_make_request(request)
+        # TODO: (later) need to formalize this a little better than just here (and whereever it is serialized)
+        results = self.last_response.query_results
+        for item, dest in [(f, dest_dir.joinpath(f)) for f in (results['files'] if 'files' in results else [])]:
+            dest.parent.mkdir(exist_ok=True)
+            success = success and await self.download_from_dataset(dataset_name=dataset_name, item_name=item, dest=dest)
+        return success
+
+    async def download_from_dataset(self, dataset_name: str, item_name: str, dest: Path) -> bool:
+        if dest.exists():
+            return False
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+        except:
+            return False
+        request = DatasetManagementMessage(action=ManagementAction.REQUEST_DATA, dataset_name=dataset_name,
+                                           data_location=item_name)
+        self.last_response: DatasetManagementResponse = await self.async_make_request(request)
+        with dest.open('w') as file:
+            for page in range(1, (self.last_response.total_pages + 1)):
+                request = DatasetManagementMessage(action=ManagementAction.DOWNLOAD_DATA, dataset_name=dataset_name,
+                                                   data_location=item_name, page=page)
+                self.last_response: DatasetManagementResponse = await self.async_make_request(request)
+                file.write(self.last_response.file_data)
 
     async def list_datasets(self, category: Optional[DataCategory] = None) -> List[str]:
         action = ManagementAction.LIST_ALL if category is None else ManagementAction.SEARCH
