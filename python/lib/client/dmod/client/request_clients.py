@@ -61,6 +61,14 @@ class DatasetClient(ABC):
         pass
 
     @abstractmethod
+    async def download_dataset(self, dataset_name: str, dest_dir: Path) -> bool:
+        pass
+
+    @abstractmethod
+    async def download_from_dataset(self, dataset_name: str, item_name: str, dest: Path) -> bool:
+        pass
+
+    @abstractmethod
     async def list_datasets(self, category: Optional[DataCategory] = None) -> List[str]:
         pass
 
