@@ -279,6 +279,81 @@ class DatasetExternalClient(DatasetClient,
         # TODO: think about if anything is needed for this
         pass
 
+    async def _upload_file(self, dataset_name: str, path: Path, item_name: str) -> bool:
+        """
+        Upload a single file to the dataset
+
+        Parameters
+        ----------
+        dataset_name : str
+            The name of the destination dataset.
+        path : Path
+            The path of the local file to upload.
+        item_name : str
+            The name of the destination dataset item in which to place the data.
+        Returns
+        -------
+        bool
+            Whether the data upload was successful.
+        """
+        await self._async_acquire_session_info()
+        #raw_data = path.read_bytes()
+        chunk_size = 1024
+        message = MaaSDatasetManagementMessage(action=ManagementAction.ADD_DATA, dataset_name=dataset_name,
+                                               session_secret=self.session_secret, data_location=item_name)
+        async with websockets.connect(self.endpoint_uri, ssl=self.client_ssl_context) as websocket:
+            with path.open() as file:
+                raw_chunk = file.read(chunk_size)
+                while True:
+                    await websocket.send(str(message))
+                    response_json = json.loads(await websocket.recv())
+                    response = MaaSDatasetManagementResponse.factory_init_from_deserialized_json(response_json)
+                    if response is not None:
+                        self.last_response = response
+                        return response.success
+                    response = DataTransmitResponse.factory_init_from_deserialized_json(response_json)
+                    if response is None:
+                        return False
+                    if not response.success:
+                        self.last_response = response
+                        return response.success
+                    # If here, we must have gotten a transmit response indicating we can send more data, so prime the next
+                    #   sending message for the start of the loop
+                    next_chunk = file.read(chunk_size)
+                    message = DataTransmitMessage(data=raw_chunk, series_uuid=response.series_uuid,
+                                                  is_last=not bool(next_chunk))
+                    raw_chunk = next_chunk
+
+    async def _upload_dir(self, dataset_name: str, dir_path: Path, item_name_prefix: str = '') -> bool:
+        """
+        Upload the contents of a local directory to a dataset.
+
+        Parameters
+        ----------
+        dataset_name : str
+            The name of the dataset.
+        dir_path : Path
+            The path of the local directory containing data files to upload.
+        item_name_prefix : str
+            A prefix to append to the name of destination items (otherwise equal to the local data files basename), used
+            to make recursive calls to this function on subdirectories and emulate the local directory structure.
+
+        Returns
+        -------
+        bool
+            Whether data upload was successful.
+        """
+        success = True
+        for child in dir_path.iterdir():
+            if child.is_dir():
+                new_prefix = '{}{}/'.format(item_name_prefix, child.name)
+                success = success and await self._upload_dir(dataset_name=dataset_name, dir_path=child,
+                                                             item_name_prefix=new_prefix)
+            else:
+                success = success and await self._upload_file(dataset_name=dataset_name, path=child,
+                                                              item_name='{}{}'.format(item_name_prefix, child.name))
+        return success
+
     async def create_dataset(self, name: str, category: DataCategory, domain: DataDomain, **kwargs) -> bool:
         await self._async_acquire_session_info()
         # TODO: (later) consider also adding param for data to be added
@@ -362,8 +437,18 @@ class DatasetExternalClient(DatasetClient,
         bool
             Whether uploading was successful
         """
-        # TODO: *********************************************
-        raise NotImplementedError('Function upload_to_dataset not implemented')
+        # Don't do anything if any paths are bad
+        if len([p for p in paths if not p.exists()]) > 0:
+            raise RuntimeError('Upload failed due to invalid non-existing paths being received')
+
+        success = True
+        # For all individual files
+        for p in paths:
+            if p.is_file():
+                success = success and await self._upload_file(dataset_name=dataset_name, path=p, item_name=p.name)
+            else:
+                success = success and await self._upload_dir(dataset_name=dataset_name, dir_path=p)
+        return success
 
     @property
     def errors(self):
