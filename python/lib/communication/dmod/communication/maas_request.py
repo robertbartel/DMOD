@@ -819,11 +819,12 @@ class NGENRequest(ModelExecRequest):
         """
         try:
             return cls(time_range=TimeRange.factory_init_from_deserialized_json(json_obj['model']['time_range']),
+                       cpu_count=json_obj['model']['cpu_count'],
                        hydrofabric_uid=json_obj['model']['hydrofabric_uid'],
                        hydrofabric_data_id=json_obj['model']['hydrofabric_data_id'],
                        config_data_id=json_obj['model']['config_data_id'],
                        bmi_cfg_data_id=json_obj['model']['bmi_config_data_id'],
-                       catchments=json_obj['catchments'] if 'catchments' in json_obj else None,
+                       catchments=json_obj['model']['catchments'] if 'catchments' in json_obj['model'] else None,
                        session_secret=json_obj['session-secret'])
         except Exception as e:
             return None
@@ -1148,6 +1149,7 @@ class NGENRequest(ModelExecRequest):
         {
             'model': {
                 'name': 'ngen',
+                'cpu_count': <cpu_count>,
                 'time_range': { <serialized_time_range_object> },
                 'hydrofabric_data_id': 'hy-data-id-val',
                 'hydrofabric_uid': 'hy-uid-val',
@@ -1169,6 +1171,7 @@ class NGENRequest(ModelExecRequest):
         """
         model = dict()
         model["name"] = self.get_model_name()
+        model["cpu_count"] = self.cpu_count
         model["time_range"] = self.time_range.to_dict()
         model["hydrofabric_data_id"] = self.hydrofabric_data_id
         model["hydrofabric_uid"] = self.hydrofabric_uid
