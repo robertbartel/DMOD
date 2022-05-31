@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
-from dmod.communication import InternalServiceClient, MaasRequestClient, ManagementAction
+from datetime import datetime
+from dmod.communication import InternalServiceClient, MaasRequestClient, ManagementAction, ModelExecRequestClient, \
+    NGENRequest, NGENRequestResponse
 from dmod.communication.client import R
 from dmod.communication.dataset_management_message import DatasetManagementMessage, DatasetManagementResponse, \
     MaaSDatasetManagementMessage, MaaSDatasetManagementResponse, QueryType, DatasetQuery
 from dmod.communication.data_transmit_message import DataTransmitMessage, DataTransmitResponse
-from dmod.core.meta_data import DataCategory, DataDomain
+from dmod.core.meta_data import DataCategory, DataDomain, TimeRange
 from pathlib import Path
 from typing import List, Optional, Tuple, Type, Union
 
@@ -13,6 +15,89 @@ import websockets
 
 #import logging
 #logger = logging.getLogger("gui_log")
+
+
+class NgenRequestClient(ModelExecRequestClient):
+
+    # In particular needs - endpoint_uri: str, ssl_directory: Path
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._cached_session_file = Path.home().joinpath('.dmod_client_session')
+
+    def _acquire_session_info(self, use_current_values: bool = True, force_new: bool = False):
+        """
+        Attempt to set the session information properties needed to submit a maas request.
+
+        Parameters
+        ----------
+        use_current_values : bool
+            Whether to use currently held attribute values for session details, if already not None (disregarded if
+            ``force_new`` is ``True``).
+        force_new : bool
+            Whether to force acquiring a new session, regardless of data available is available on an existing session.
+
+        Returns
+        -------
+        bool
+            whether session details were acquired and set successfully
+        """
+        #logger.info("{}._acquire_session_info:  getting session info".format(self.__class__.__name__)
+        if not force_new and use_current_values and self._session_id and self._session_secret and self._session_created:
+            #logger.info('Using previously acquired session details (new session not forced)')
+            return True
+        else:
+            #logger.info("Session from JobRequestClient: force_new={}".format(force_new))
+            tmp = self._acquire_new_session()
+            #logger.info("Session Info Return: {}".format(tmp))
+            return tmp
+
+    async def _async_acquire_session_info(self, use_current_values: bool = True, force_new: bool = False):
+        if use_current_values and not force_new and self._cached_session_file.exists():
+            try:
+                session_id, secret, created = self.parse_session_auth_text(self._cached_session_file.read_text())
+                self._session_id = session_id
+                self._session_secret = secret
+                self._session_create = created
+            except Exception as e:
+                pass
+
+        if not force_new and use_current_values and self._session_id and self._session_secret and self._session_created:
+            #logger.info('Using previously acquired session details (new session not forced)')
+            return True
+        else:
+            tmp = await self._async_acquire_new_session(cached_session_file=self._cached_session_file)
+            #logger.info("Session Info Return: {}".format(tmp))
+            return tmp
+
+    async def request_exec(self, start: datetime, end: datetime, hydrofabric_data_id: str, hydrofabric_uid: str,
+                           cpu_count: int, realization_cfg_data_id: str, bmi_cfg_data_id: str,
+                           partition_cfg_data_id: Optional[str] = None, cat_ids: Optional[List[str]] = None) -> NGENRequestResponse:
+        await self._async_acquire_session_info()
+        request = NGENRequest(session_secret=self.session_secret,
+                              cpu_count=cpu_count,
+                              time_range=TimeRange(begin=start, end=end),
+                              hydrofabric_uid=hydrofabric_uid,
+                              hydrofabric_data_id=hydrofabric_data_id,
+                              config_data_id=realization_cfg_data_id,
+                              bmi_cfg_data_id=bmi_cfg_data_id,
+                              partition_cfg_data_id=partition_cfg_data_id,
+                              catchments=cat_ids)
+        return await self.async_make_request(request)
+
+    @property
+    def errors(self):
+        # TODO: think about this more
+        return self._errors
+
+    @property
+    def info(self):
+        # TODO: think about this more
+        return self._info
+
+    @property
+    def warnings(self):
+        # TODO: think about this more
+        return self._warnings
 
 
 class DatasetClient(ABC):
