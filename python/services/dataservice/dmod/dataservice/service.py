@@ -753,7 +753,7 @@ class ServiceManager(WebSocketInterface):
                                                                   dest_item_name=partial_item_name,
                                                                   message=inbound_message,
                                                                   is_temp=True,
-                                                                  manager=dest_dataset_manager)
+                                                                  manager=dataset_manager)
                     partial_indx += 1
                     if inbound_message.is_last and response.success:
                         partial_items = ['{}.{}.{}'.format(transmit_series_uuid, dest_item_name, i) for i in range(partial_indx)]
@@ -825,17 +825,25 @@ class ServiceManager(WebSocketInterface):
         ``AWAITING_PARTITIONING`` step and any needed output datasets are created.  If not, the job is moved to the
         ``DATA_UNPROVIDEABLE`` step.
         """
+        logging.debug("Starting task loop for performing checks for required data for jobs.")
         while True:
+            lock_id = str(uuid4())
+            while not self._job_util.lock_active_jobs(lock_id):
+                await asyncio.sleep(2)
+
             for job in self._job_util.get_all_active_jobs():
                 if job.status_step != JobExecStep.AWAITING_DATA_CHECK:
                     continue
 
+                logging.debug("Checking if required data is available for job {}.".format(job.job_id))
                 # Check if all requirements for this job can be fulfilled, updating the job's status based on result
                 if await self.perform_checks_for_job(job):
+                    logging.info("All required data for {} is available.".format(job.job_id))
                     # Before moving to next successful step, also create output datasets and requirement entries
                     self._create_output_datasets(job)
                     job.status_step = JobExecStep.AWAITING_PARTITIONING
                 else:
+                    logging.error("Some or all required data for {} is unprovideable.".format(job.job_id))
                     job.status_step = JobExecStep.DATA_UNPROVIDEABLE
 
                 # Regardless, save the updated job state
@@ -844,6 +852,7 @@ class ServiceManager(WebSocketInterface):
                 except:
                     # TODO: logging would be good, and perhaps maybe retries
                     pass
+            self._job_util.unlock_active_jobs(lock_id)
             await asyncio.sleep(5)
 
     async def manage_data_provision(self):
