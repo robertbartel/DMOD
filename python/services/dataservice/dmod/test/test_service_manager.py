@@ -145,6 +145,7 @@ class TestServiceManager(unittest.TestCase):
                         "model": {
                             "bmi_config_data_id": "simple-bmi-cfe-1",
                             "config_data_id": "huc01-simple-config-1",
+                            "cpu_count": cpu_count_ex_0,
                             "hydrofabric_data_id": "huc01-hydrofabric-2021-10-28-part-8",
                             "hydrofabric_uid": "72c2a0220aa7315b50e55b6c5b68f927ac1d9b81",
                             "name": "ngen",
@@ -202,6 +203,7 @@ class TestServiceManager(unittest.TestCase):
                         "model": {
                             "bmi_config_data_id": "simple-bmi-cfe-1",
                             "config_data_id": "huc01-simple-config-1",
+                            "cpu_count": cpu_count_ex_1,
                             "hydrofabric_data_id": "huc01-hydrofabric-2021-10-28-part-8",
                             "hydrofabric_uid": "72c2a0220aa7315b50e55b6c5b68f927ac1d9b81",
                             "name": "ngen",
@@ -265,6 +267,7 @@ class TestServiceManager(unittest.TestCase):
                         "model": {
                             "bmi_config_data_id": "simple-bmi-cfe-1",
                             "config_data_id": "huc01-simple-config-1",
+                            "cpu_count": cpu_count_ex_2,
                             "hydrofabric_data_id": "huc01-hydrofabric-2021-10-28-part-8",
                             "hydrofabric_uid": "72c2a0220aa7315b50e55b6c5b68f927ac1d9b81",
                             "name": "ngen",
@@ -327,6 +330,7 @@ class TestServiceManager(unittest.TestCase):
                         "model": {
                             "bmi_config_data_id": "simple-bmi-cfe-1",
                             "config_data_id": "huc01-simple-config-1",
+                            "cpu_count": cpu_count_ex_3,
                             "hydrofabric_data_id": "huc01-hydrofabric-2021-10-28-part-8",
                             "hydrofabric_uid": "72c2a0220aa7315b50e55b6c5b68f927ac1d9b81",
                             "name": "ngen",
@@ -395,6 +399,7 @@ class TestServiceManager(unittest.TestCase):
                         "model": {
                             "bmi_config_data_id": "simple-bmi-cfe-1",
                             "config_data_id": "huc01-simple-config-1",
+                            "cpu_count": cpu_count_ex_4,
                             "hydrofabric_data_id": "huc01-hydrofabric-2021-10-28-part-8",
                             "hydrofabric_uid": "72c2a0220aa7315b50e55b6c5b68f927ac1d9b81",
                             "name": "ngen",
@@ -548,6 +553,7 @@ class TestServiceManager(unittest.TestCase):
                         "model": {
                             "bmi_config_data_id": "simple-bmi-cfe-1",
                             "config_data_id": "huc01-simple-config-1",
+                            "cpu_count": cpu_count_ex_5,
                             "hydrofabric_data_id": "huc01-hydrofabric-2021-10-28-part-8",
                             "hydrofabric_uid": "72c2a0220aa7315b50e55b6c5b68f927ac1d9b81",
                             "name": "ngen",
