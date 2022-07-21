@@ -34,6 +34,7 @@ MAAS_R = TypeVar("MAAS_R", bound=MaaSRequestResponse)
 MOD_EX_M = TypeVar("MOD_EX_M", bound=ModelExecRequest)
 MOD_EX_R = TypeVar("MOD_EX_R", bound=ModelExecRequestResponse)
 
+
 def get_or_create_eventloop() -> AbstractEventLoop:
     """
     Retrieves an async event loop
