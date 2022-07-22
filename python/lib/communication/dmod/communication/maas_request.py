@@ -204,6 +204,9 @@ class ModelExecRequest(ExternalRequest, DmodJobRequest, ABC):
     model_name = None
     """(:class:`str`) The name of the model to be used"""
 
+    _DEFAULT_CPU_COUNT = 1
+    """ The default number of CPUs to assume are being requested for the job, when not explicitly provided. """
+
     @classmethod
     def factory_init_correct_subtype_from_deserialized_json(cls, json_obj: dict) -> 'ModelExecRequest':
         """
@@ -238,7 +241,7 @@ class ModelExecRequest(ExternalRequest, DmodJobRequest, ABC):
         """
         return cls.model_name
 
-    def __init__(self, config_data_id: str, cpu_count: int = 1,
+    def __init__(self, config_data_id: str, cpu_count: Optional[int] = None,
                  allocation_paradigm: Optional[Union[str, AllocationParadigm]] = None,  *args, **kwargs):
         """
         Initialize model-exec-specific attributes and state of this request object common to all model exec requests.
@@ -250,7 +253,7 @@ class ModelExecRequest(ExternalRequest, DmodJobRequest, ABC):
         """
         super(ModelExecRequest, self).__init__(*args, **kwargs)
         self._config_data_id = config_data_id
-        self._cpu_count = cpu_count
+        self._cpu_count = cpu_count if cpu_count is not None else self._DEFAULT_CPU_COUNT
         if allocation_paradigm is None:
             self._allocation_paradigm = AllocationParadigm.get_default_selection()
         elif isinstance(allocation_paradigm, str):
@@ -708,8 +711,8 @@ class NWMRequest(ModelExecRequest):
         """
         try:
             obj = cls(config_data_id=json_obj['model'][cls.model_name]['config_data_id'],
-                      cpu_count=json_obj['model'][cls.model_name]['cpu_count'],
-                      allocation_paradigm=json_obj['model'][cls.model_name]['allocation_paradigm'],
+                      cpu_count=json_obj['model'][cls.model_name].get('cpu_count'),
+                      allocation_paradigm=json_obj['model'][cls.model_name].get('allocation_paradigm'),
                       session_secret=json_obj['session-secret'])
 
             reqs = [DataRequirement.factory_init_from_deserialized_json(req_json) for req_json in
@@ -859,8 +862,8 @@ class NGENRequest(ModelExecRequest):
         """
         try:
             return cls(time_range=TimeRange.factory_init_from_deserialized_json(json_obj['model']['time_range']),
-                       cpu_count=json_obj['model']['cpu_count'],
-                       allocation_paradigm=json_obj['model']['allocation_paradigm'],
+                       cpu_count=json_obj['model'].get('cpu_count'),
+                       allocation_paradigm=json_obj['model'].get('allocation_paradigm'),
                        hydrofabric_uid=json_obj['model']['hydrofabric_uid'],
                        hydrofabric_data_id=json_obj['model']['hydrofabric_data_id'],
                        config_data_id=json_obj['model']['config_data_id'],
