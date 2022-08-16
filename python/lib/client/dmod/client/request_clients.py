@@ -18,6 +18,41 @@ import websockets
 #logger = logging.getLogger("gui_log")
 
 
+class FollowableClient(ABC):
+
+    @abstractmethod
+    async def follow_exec(self, job_id: str):
+        """
+        Connect to the service to request update messages be sent to this client and added to the update queue.
+
+        Parameters
+        ----------
+        job_id : str
+            The job id of the job execution of interest.
+        """
+        pass
+
+    @abstractmethod
+    def get_update_from_queue(self, job_id: str) -> UpdateMessage:
+        pass
+
+    @abstractmethod
+    def is_following_updates(self, job_id: str) -> bool:
+        """
+        Whether this client is currently following updates for the given job id.
+
+        Parameters
+        ----------
+        job_id
+
+        Returns
+        -------
+        bool
+            Whether this client is currently following updates for the given job id.
+        """
+        pass
+
+
 class NgenRequestClient(ModelExecRequestClient[NGENRequest, NGENRequestResponse]):
 
     # In particular needs - endpoint_uri: str, ssl_directory: Path
