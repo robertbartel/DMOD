@@ -66,6 +66,62 @@ class NgenRequestClient(ModelExecRequestClient[NGENRequest, NGENRequestResponse]
         self._update_queues: Dict[str, asyncio.Queue[UpdateMessage]] = dict()
         """ Map keyed by job id of queues of received, but not processed, updates from follow_exec """
 
+    async def build_message(self, *args, **kwargs) -> NGENRequest:
+        """
+        Build a ::class:`NGENRequest` from the passed args.
+
+        This function expects to receive the same args, in the same order (for non-keyword args) as the init function
+        for ::class:`NGENRequest`, except for the session secret (itself a var/keyword arg for the init function of
+        ::class:`NGENRequest` directly).  The session secret is stored in a property of the client, and as such provided
+        directly.
+
+        Parameters
+        ----------
+        args
+        kwargs
+
+        Other Parameters
+        ----------
+        time_range : TimeRange
+            The time range for the message.
+        hydrofabric_data_id : str
+            The data id for the hydrofabric dataset to use for the requested job.
+        hydrofabric_uid : str
+            The unique id for the hydrofabric to use for the requested job.
+        cpu_count : int
+            The number of CPUs requested in this message.
+        realization_cfg_data_id : str
+            The data id for the realization config dataset to use for the requested job.
+        bmi_cfg_data_id : str
+            The data id for the BMI initialization config dataset to use for the requested job.
+        partition_cfg_data_id : str, optional
+            The optional data id for the partitioning config dataset, if one is to be specified in this job request.
+        cat_ids : List[str], optional
+            The list of catchment ids involved in the request, if the job should operate on a subset of the entired
+            hydrofabric.
+        allocation_paradigm : AllocationParadigm, optional
+            The allocation paradigm requested for the job, if one is explicitly specified.
+
+        Returns
+        -------
+        NGENRequest
+            An initialized ::class:`NGENRequest`.
+        """
+
+        def parse_param(key_name: str, var_index: int):
+            return kwargs.get(key_name, (args[var_index] if len(args) > var_index else None))
+
+        return NGENRequest(session_secret=self.session_secret,
+                           cpu_count=parse_param('cpu_count', 3),
+                           allocation_paradigm=parse_param('allocation_paradigm', 8),
+                           time_range=parse_param('time_range', 0),
+                           hydrofabric_uid=parse_param('hydrofabric_uid', 2),
+                           hydrofabric_data_id=parse_param('hydrofabric_data_id', 1),
+                           config_data_id=parse_param('realization_cfg_data_id', 4),
+                           bmi_cfg_data_id=parse_param('bmi_cfg_data_id', 5),
+                           partition_cfg_data_id=parse_param('partition_cfg_data_id', 6),
+                           catchments=parse_param('cat_ids', 7))
+
     async def follow_exec(self, job_id: str):
         """
         Connect to the service to request update messages be sent to this client and added to the update queue.
