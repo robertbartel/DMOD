@@ -158,6 +158,10 @@ class ExternalRequest(AbstractInitRequest, ABC):
         except:
             return False
 
+    # TODO: fix the bug that this isn't serialized/deserialized correctly
+    def to_dict(self) -> Dict[str, Union[str, Number, dict, list]]:
+        return {'session_secret': self.session_secret}
+
 
 class DmodJobRequest(AbstractInitRequest, ABC):
     """
