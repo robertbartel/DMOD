@@ -1,7 +1,50 @@
 from .message import AbstractInitRequest, MessageEventType, Response
+from .maas_request import ExternalRequest
+from numbers import Number
 from pydoc import locate
 from typing import Dict, Optional, Type, Union
 import uuid
+
+
+class UpdateRegistrationMessage(ExternalRequest):
+
+    @classmethod
+    def factory_init_from_deserialized_json(cls, json_obj: dict):
+        try:
+            return cls(job_id=json_obj['job_id'], session_secret=json_obj['session_secret'])
+        except:
+            return None
+
+    def __init__(self, job_id: str, *args, **kwargs):
+        """
+
+        Parameters
+        ----------
+        job_id
+        args
+        kwargs
+
+        Other Parameters
+        ----------
+        session_secret : str
+            The session secret, required for superclass init.
+        """
+        super(UpdateRegistrationMessage, self).__init__(*args, **kwargs)
+        self._job_id = job_id
+
+    @property
+    def job_id(self) -> str:
+        return self._job_id
+
+    def to_dict(self) -> Dict[str, Union[str, Number, dict, list]]:
+        serial = super(UpdateRegistrationMessage, self).to_dict()
+        serial['job_id'] = self.job_id
+        return serial
+
+
+class UpdateRegistrationResponse(Response):
+
+    response_to_type = UpdateRegistrationMessage
 
 
 class UpdateMessage(AbstractInitRequest):
