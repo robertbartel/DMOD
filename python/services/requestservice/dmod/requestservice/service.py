@@ -10,7 +10,8 @@ from websockets import WebSocketServerProtocol
 
 from dmod.access import DummyAuthUtil, RedisBackendSessionManager
 from dmod.communication import AbstractInitRequest, InvalidMessageResponse, MessageEventType, NGENRequest, NWMRequest, \
-    PartitionRequest, WebSocketSessionsInterface, SessionInitMessage, SchedulerClient, UnsupportedMessageTypeResponse
+    PartitionRequest, WebSocketSessionsInterface, SessionInitMessage, SchedulerClient, UnsupportedMessageTypeResponse, \
+    UpdateMessage, UpdateMessageResponse, UpdateRegistrationMessage, UpdateRegistrationResponse
 from dmod.communication.dataset_management_message import MaaSDatasetManagementMessage
 from dmod.externalrequests import AuthHandler, DatasetRequestHandler, ModelExecRequestHandler, PartitionRequestHandler
 
@@ -115,6 +116,14 @@ class RequestService(WebSocketSessionsInterface):
                                                            data_service_port=int(data_service_port),
                                                            data_service_ssl_dir=self.data_service_ssl_dir)
 
+    async def _process_update_routine(self, initial_msg: UpdateRegistrationMessage, websocket: WebSocketServerProtocol):
+        if not isinstance(initial_msg, UpdateRegistrationResponse):
+            await websocket.send(str(InvalidMessageResponse(data=initial_msg)))
+            return
+        await websocket.send(str(UpdateRegistrationResponse(success=True, reason='Registered')))
+        # TODO: now, how to actually know when to send an update???
+        raise NotImplementedError("Need to finish {}._process_update_routine function".format(self.__class__.__name__))
+
     @property
     def session_manager(self):
         return self._session_manager
@@ -153,9 +162,9 @@ class RequestService(WebSocketSessionsInterface):
                     logging.debug('************************* Handled request response: {}'.format(str(response)))
                     await websocket.send(str(response))
 
-                    # TODO loop here to handle a series of multiple requests, as job goes from requested to allocated to
-                    #  scheduled to finished (and of course, the messages for output data)
-                    #  try while except connectionClosed; let server tell us when to stop listening
+                elif event_type == MessageEventType.INFORMATION_UPDATE:
+                    await self._process_update_routine(req_message, websocket)
+
                 elif event_type == MessageEventType.PARTITION_REQUEST:
                     response = await self._partition_request_handler.handle_request(request=req_message)
                     logging.debug('************************* Handled request response: {}'.format(str(response)))
