@@ -450,7 +450,7 @@ def execute_jobs_command(args, client: DmodClient):
 def execute_workflow_command(args, client: DmodClient):
     async_loop = get_or_create_eventloop()
     if args.workflow == 'ngen':
-        result = async_loop.run_until_complete(client.submit_ngen_request(**(vars(args))))
+        result = async_loop.run_until_complete(client.submit_ngen_request(**(vars(args)), follow_updates_locally=True))
         print(result)
     else:
         print("ERROR: Unsupported execution workflow {}".format(args.workflow))
