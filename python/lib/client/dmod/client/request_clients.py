@@ -1,16 +1,20 @@
+import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from dmod.core.execution import AllocationParadigm
+from dmod.core.exception import DmodRuntimeError
 from dmod.communication import DataServiceClient, ExternalRequestClient, ManagementAction, ModelExecRequestClient, \
-    NGENRequest, NGENRequestResponse
+    NGENRequest, NGENRequestResponse, UpdateMessage, UpdateMessageResponse, UpdateRegistrationMessage, \
+    UpdateRegistrationResponse
 from dmod.communication.client import R
 from dmod.communication.dataset_management_message import DatasetManagementMessage, DatasetManagementResponse, \
     MaaSDatasetManagementMessage, MaaSDatasetManagementResponse, QueryType, DatasetQuery
 from dmod.communication.data_transmit_message import DataTransmitMessage, DataTransmitResponse
-from dmod.core.meta_data import DataCategory, DataDomain, TimeRange
+from dmod.core.meta_data import DataCategory, DataDomain
 from pathlib import Path
-from typing import List, Optional, Tuple, Type, Union
+from typing import Dict, List, Optional, Tuple, Type, Union
 
+import asyncio
 import json
 import websockets
 
@@ -53,28 +57,100 @@ class FollowableClient(ABC):
         pass
 
 
-class NgenRequestClient(ModelExecRequestClient[NGENRequest, NGENRequestResponse]):
+class NgenRequestClient(ModelExecRequestClient[NGENRequest, NGENRequestResponse], FollowableClient):
 
     # In particular needs - endpoint_uri: str, ssl_directory: Path
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._cached_session_file = Path.home().joinpath('.dmod_client_session')
+        self._update_queues: Dict[str, asyncio.Queue[UpdateMessage]] = dict()
+        """ Map keyed by job id of queues of received, but not processed, updates from follow_exec """
 
-    async def request_exec(self, start: datetime, end: datetime, hydrofabric_data_id: str, hydrofabric_uid: str,
-                           cpu_count: int, realization_cfg_data_id: str, bmi_cfg_data_id: str,
-                           partition_cfg_data_id: Optional[str] = None, cat_ids: Optional[List[str]] = None,
-                           allocation_paradigm: Optional[AllocationParadigm] = None) -> NGENRequestResponse:
+    async def follow_exec(self, job_id: str):
+        """
+        Connect to the service to request update messages be sent to this client and added to the update queue.
+
+        Parameters
+        ----------
+        job_id : str
+            The job id of the job execution of interest.
+        """
+        # TODO: handle case when the queue for this id already exists
+        self._update_queues[job_id] = asyncio.Queue()
+        
+        try:
+            register_msg = UpdateRegistrationMessage(job_id=job_id, session_secret=self.session_secret)
+            raw_response = await self.async_send(str(register_msg), await_response=True)
+            response_obj = UpdateRegistrationResponse.factory_init_from_deserialized_json(json.loads(raw_response))
+            if response_obj is None:
+                raise DmodRuntimeError("{} didn't receive registration confirmation".format(self.__class__.__name__))
+            elif not response_obj.success:
+                raise DmodRuntimeError("{} failed to register for updates".format(self.__class__.__name__))
+
+            listen_for_updates = True
+            while listen_for_updates:
+                # Await update messages 
+                raw_update = await self.async_recv()
+                # Convert raw update to update object
+                update_object = UpdateMessage.factory_init_from_deserialized_json(json.loads(raw_update))
+                # Make sure we can read the data, or bail and respond with the error
+                if not isinstance(update_object, UpdateMessage):
+                    msg = 'Could not deserialize received data to a valid {}'.format(UpdateMessage.__name__)
+                    response = UpdateMessageResponse(success=False, reason='Invalid Update Message Data',
+                                                     response_text=msg, data={'received_data': raw_update})
+                    await self.async_send(data=str(response), await_response=False)
+                    break
+                # Otherwise, proceed, but ensure the update was for the right record/object
+                if update_object.object_id == job_id:
+                    # Put received update messages into an externally-accessible queue for other async coroutines/tasks
+                    await self._update_queues[job_id].put(update_object)
+                    response = UpdateMessageResponse(success=True, reason='Valid Update', digest=update_object.digest)
+                else:
+                    msg = "Expected updates for object {} but received for id {}"
+                    response = UpdateMessageResponse(success=False, reason='Unexpected Object Id',
+                                                     response_text=msg.format(job_id, update_object.object_id),
+                                                     digest=update_object.digest)
+                await self.async_send(data=str(response), await_response=False)
+                listen_for_updates = self._continue_following_updates(job_id=job_id, last_message=update_object)
+        finally:
+            self._update_queues.pop(job_id)
+
+    def _continue_following_updates(self, job_id: str, last_message: UpdateMessage) -> bool:
+        if last_message.object_id != job_id:
+            msg = '{} received update for unexpected object id {} (expected {}); ignoring'
+            logging.warning(msg.format(self.__class__.__name__, last_message.object_id, job_id))
+            return True
+        stop_steps = {'DATA_UNPROVIDEABLE', 'PARTITIONING_FAILED', 'DATA_FAILURE', 'STOPPED', 'COMPLETED', 'FAILED'}
+        return last_message.updated_data.get('status', ':').split(':')[-1] in stop_steps
+
+    def get_update_from_queue(self, job_id: str) -> UpdateMessage:
+        if not self.is_following_updates(job_id):
+            raise ValueError("{} is not following the exec updates of job {}".format(self.__class__.__name__, job_id))
+        return await self._update_queues[job_id].get()
+
+    def is_following_updates(self, job_id: str) -> bool:
+        """
+        Whether this client is currently following updates for the given job id.
+
+        Parameters
+        ----------
+        job_id
+
+        Returns
+        -------
+        bool
+            Whether this client is currently following updates for the given job id.
+        """
+        return job_id in self._update_queues
+
+    async def request_exec(self, request: Optional[NGENRequest] = None, *args, **kwargs) -> NGENRequestResponse:
+        if request is None:
+            request = self.build_message(*args, **kwargs)
+        if request is None:
+            msg = 'Cannot request exec in {} without message object or details'
+            raise DmodRuntimeError(msg.format(self.__class__.__name__))
         await self._async_acquire_session_info()
-        request = NGENRequest(session_secret=self.session_secret,
-                              cpu_count=cpu_count,
-                              allocation_paradigm=allocation_paradigm,
-                              time_range=TimeRange(begin=start, end=end),
-                              hydrofabric_uid=hydrofabric_uid,
-                              hydrofabric_data_id=hydrofabric_data_id,
-                              config_data_id=realization_cfg_data_id,
-                              bmi_cfg_data_id=bmi_cfg_data_id,
-                              partition_cfg_data_id=partition_cfg_data_id,
-                              catchments=cat_ids)
+        # TODO: make sure this function is implemented in a reasonable way
         return await self.async_make_request(request)
 
 
