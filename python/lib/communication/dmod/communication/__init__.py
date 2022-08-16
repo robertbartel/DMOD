@@ -14,7 +14,7 @@ from .session import Session, FullAuthSession, SessionInitMessage, SessionInitRe
     SessionInitFailureReason, SessionManager
 from .dataset_management_message import DatasetManagementMessage, DatasetManagementResponse, ManagementAction
 from .validator import SessionInitMessageJsonValidator, NWMRequestJsonValidator, MessageJsonValidator
-from .update_message import UpdateMessage, UpdateMessageResponse
+from .update_message import UpdateMessage, UpdateMessageResponse, UpdateRegistrationMessage, UpdateRegistrationResponse
 from .websocket_interface import EchoHandler, NoOpHandler, WebSocketInterface, WebSocketSessionsInterface
 from .unsupported_message import UnsupportedMessageTypeResponse
 
