@@ -32,9 +32,12 @@ check_for_default_dataset_dirs
 # Move to the output dataset mounted directory
 cd ${OUTPUT_DATASET_DIR}
 
+# Source the appropriate function for the main worker of this particular image
+source ./main_worker_exec.sh
+
 if [ "${WORKER_INDEX}" = "0" ]; then
     if [ "$(whoami)" = "${MPI_USER}" ]; then
-        exec_main_worker_ngen_run
+        exec_main_worker
     else
         echo "$(print_date) Starting SSH daemon on main worker"
         /usr/sbin/sshd -D &
