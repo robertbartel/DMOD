@@ -14,6 +14,11 @@ services:
         NETCDF_FORTRAN_VERSION: ${NETCDF_FORTRAN_VERSION:-latest}
     depends_on:
       - base
+  ngen-calibration:
+    image: ${DOCKER_INTERNAL_REGISTRY:?}/ngen-calibration
+    build:
+      context: ../../
+      dockerfile: ./docker/main/ngen-calibration/Dockerfile
   s3fs-volume-helper:
     image: ${DOCKER_INTERNAL_REGISTRY:?}/s3fs-volume-helper
     build:
