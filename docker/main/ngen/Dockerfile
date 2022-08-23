@@ -271,6 +271,8 @@ RUN rm -rf ${BOOST_ROOT} && echo "export PATH=${PATH}" >> /etc/profile \
     && mkdir -p /dmod/shared_libs && chown ${USER} /dmod/shared_libs
 USER ${USER}
 
+COPY --chown=${USER} common.sh ${WORKDIR}
+COPY --chown=${USER} main_worker_exec.sh ${WORKDIR}
 COPY --chown=${USER} entrypoint.sh ${WORKDIR}
 
 ENV HYDRA_PROXY_RETRY_COUNT=5
