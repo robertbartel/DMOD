@@ -107,6 +107,8 @@ class DataFormat(Enum):
     """ Format for NWM 2.0/2.1/2.2 output. """
     NWM_CONFIG = (9, {StandardDatasetIndex.ELEMENT_ID: None, StandardDatasetIndex.TIME: None, StandardDatasetIndex.DATA_ID: None}, None)
     """ Format for initial config for NWM 2.0/2.1/2.2. """
+    NGEN_CAL_CONFIG = (10, {StandardDatasetIndex.GLOBAL_CHECKSUM: None, StandardDatasetIndex.DATA_ID: None}, None)
+    """ Format for configuration for ngen-cal application, used for calibration workflows. """
     # TODO: consider whether a datetime format string is necessary for each type value
     # TODO: consider whether something to indicate the time step size is necessary
     # TODO: need format specifically for Nextgen model output (i.e., for evaluations)
