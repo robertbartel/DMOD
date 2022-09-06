@@ -27,7 +27,7 @@ services:
   
   # Define a container belonging exclusively to our django application
   app_server:
-    image: maas-portal-development
+    image: ${DOCKER_INTERNAL_REGISTRY:?Registry var unset (see 'Private Docker Registry' in example.env)}/dmod-portal-dev:${GUI_PY_APP_IMG_VER:-latest}
     build:
       context: ../..
       dockerfile: ./docker/nwm_gui/app_server/Dockerfile
