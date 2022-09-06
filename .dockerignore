@@ -4,3 +4,5 @@
 .idea
 docker_host_volumes
 /venv
+node_modules
+**/node_modules
