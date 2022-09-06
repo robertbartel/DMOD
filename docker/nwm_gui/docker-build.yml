@@ -1,30 +1,45 @@
 version: "3.7"
 
 services:
-  # Define a container belonging exclusively to the web server
-  web_server:
-    image: nginx:1.21
-    networks:
-      - request-listener-net
-    # Only restart if a failure occurs
-    restart: on-failure
-    ports:
-      - ${DOCKER_GUI_WEB_SERVER_HOST_PORT:-8081}:80
-    # Link everything within the static volume to /usr/maas_portal/static within the container -
-    # this will help share resources
-    volumes:
-      - ${DMOD_APP_STATIC:?}:/usr/maas_portal/static
-      - ${DOCKER_GUI_WEB_SERVER_CONFIG_FILE:-/docker/nwm_gui/web_server/nginx/default.conf}:/etc/nginx/conf.d/default.conf
-    # Make this container depend on the container holding the application server
-    # TODO: this appears to break things now for some reason, despite documentation suggesting it is still supported
-    #depends_on:
-    #  - app_server
-    deploy:
-       placement:
-         constraints:
-           - ${DOCKER_GUI_DEPLOY_CONSTRAINT_1:-node.role==manager}
-           - ${DOCKER_GUI_DEPLOY_CONSTRAINT_2:-node.id!=notrealid_tautology_by_default}
-  
+  react_app_init:
+    image: ${DOCKER_INTERNAL_REGISTRY:?Registry var unset (see 'Private Docker Registry' in example.env)}/dmod_react_init:${DMOD_REACT_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: ./docker/nwm_gui/react_spa/Dockerfile
+      target: create_app
+      args:
+        NODE_VERSION: ${DMOD_REACT_NPM_VERSION:-18}
+        REACT_APP_NAME: ${DMOD_REACT_APP_NAME:-dmod_react}
+
+  react_app_dev:
+    image: ${DOCKER_INTERNAL_REGISTRY:?Registry var unset (see 'Private Docker Registry' in example.env)}/dmod_react_dev:${DMOD_REACT_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: ./docker/nwm_gui/react_spa/Dockerfile
+      target: react_dev
+      args:
+        NODE_VERSION: ${DMOD_REACT_NPM_VERSION:-18}
+        REACT_APP_NAME: ${DMOD_REACT_APP_NAME:-dmod_react}
+
+  react_app_local_dev:
+    image: ${DOCKER_INTERNAL_REGISTRY:?Registry var unset (see 'Private Docker Registry' in example.env)}/dmod_react_local_dev:${DMOD_REACT_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: ./docker/nwm_gui/react_spa/Dockerfile
+      target: react_local_dev
+      args:
+        NODE_VERSION: ${DMOD_REACT_NPM_VERSION:-18}
+        REACT_APP_NAME: ${DMOD_REACT_APP_NAME:-dmod_react}
+
+  react_app_prod:
+    image: ${DOCKER_INTERNAL_REGISTRY:?Registry var unset (see 'Private Docker Registry' in example.env)}/dmod_react_prod:${DMOD_REACT_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: ./docker/nwm_gui/react_spa/Dockerfile
+      args:
+        NODE_VERSION: ${DMOD_REACT_NPM_VERSION:-18}
+        REACT_APP_NAME: ${DMOD_REACT_APP_NAME:-dmod_react}
+
   # Define a container belonging exclusively to our django application
   app_server:
     image: ${DOCKER_INTERNAL_REGISTRY:?Registry var unset (see 'Private Docker Registry' in example.env)}/dmod-portal-dev:${GUI_PY_APP_IMG_VER:-latest}
@@ -34,75 +49,8 @@ services:
       args:
         docker_internal_registry: ${DOCKER_INTERNAL_REGISTRY:?Missing DOCKER_INTERNAL_REGISTRY value (see 'Private Docker Registry ' section in example.env)}
         comms_package_name: ${PYTHON_PACKAGE_DIST_NAME_COMMS:?}
-    networks:
-      - request-listener-net
-    # Call this when starting the container
-    entrypoint: /usr/maas_portal/entrypoint.sh
-    # Only restart if a failure was encountered
-    restart: on-failure
-    secrets:
-        - postgres_password
-    environment:
-      #- VENV_DIR=${DOCKER_GUI_CONTAINER_VENV_DIR:-}
-      #- CERT_PATH # used by dispatch.py
-      #- PYTHONUNBUFFERED=1
-      - MAAS_ENDPOINT_HOST=${DOCKER_GUI_MAAS_ENDPOINT_HOST:-localhost}
-      - MAAS_ENDPOINT_PORT=${DOCKER_REQUESTS_HOST_PORT:-3012}
-      - MAAS_PORTAL_DEBUG_HOST=${PYCHARM_REMOTE_DEBUG_SERVER_HOST:-host.docker.internal}
-      - MAAS_PORTAL_DEBUG_PORT=${PYCHARM_REMOTE_DEBUG_SERVER_PORT_GUI:-55875}
-      - PYCHARM_REMOTE_DEBUG_ACTIVE=${PYCHARM_REMOTE_DEBUG_GUI_ACTIVE:-false}
-      - PYCHARM_REMOTE_DEBUG_VERSION=${PYCHARM_REMOTE_DEBUG_VERSION:-~=211.7628.24}
-      - SQL_ENGINE=django.db.backends.postgresql
-      - SQL_DATABASE=${DMOD_GUI_POSTGRES_DB:-dmod_dev}
-      - SQL_USER=${DMOD_GUI_POSTGRES_USER:?}
-      - SQL_HOST=db
-      - SQL_PORT=5432
-      - DATABASE=postgres
-      - DOCKER_SECRET_POSTGRES_PASS=postgres_password
-    volumes:
-      - ${DMOD_APP_STATIC:?}:/usr/maas_portal/static
-      - ${DMOD_SSL_DIR}/requestservice:/usr/maas_portal/ssl
-      #- ${DOCKER_GUI_HOST_VENV_DIR:-/tmp/blah}:${DOCKER_GUI_CONTAINER_VENV_DIR:-/tmp/blah}
-    # Expose Django's port to the internal network so that the web server may access it
-    expose:
-      - 8000
-    deploy:
-       placement:
-         constraints:
-           - ${DOCKER_GUI_DEPLOY_CONSTRAINT_1:-node.role==manager}
-           - ${DOCKER_GUI_DEPLOY_CONSTRAINT_2:-node.id!=notrealid_tautology_by_default}
-  db:
-    image: postgres:13.3-alpine
-    networks:
-      - request-listener-net
-    volumes:
-        #- ${DMOD_GUI_POSTGRES_DATA:?}:/var/lib/postgresql/data
-        - dmod_db_volume:/var/lib/postgresql/data
-    secrets:
-        - postgres_password
-    environment:
-        - POSTGRES_USER=${DMOD_GUI_POSTGRES_USER:?}
-        - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
-        - POSTGRES_DB=${DMOD_GUI_POSTGRES_DB:-dmod_dev}
-    deploy:
-       placement:
-         constraints:
-           - ${DOCKER_GUI_DEPLOY_CONSTRAINT_1:-node.role==manager}
-           - ${DOCKER_GUI_DEPLOY_CONSTRAINT_2:-node.id!=notrealid_tautology_by_default}
 
 networks:
   request-listener-net:
     external: true
     name: ${DOCKER_REQUESTS_NET_NAME}
-
-secrets:
-  postgres_password:
-    file: ../secrets/postgres_password.txt
-# Define persistent volumes that may be shared and persisted between containers
-volumes:
-    dmod_db_volume:
-#        driver: local
-#        driver_opts:
-#            type: none
-#            o: bind
-#    static_volume:
