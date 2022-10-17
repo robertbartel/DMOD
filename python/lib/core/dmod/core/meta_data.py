@@ -2,6 +2,7 @@ from enum import Enum
 from datetime import datetime
 
 from .serializable import Serializable
+from .exception import DmodRuntimeError
 from numbers import Number
 from typing import Any, Dict, List, Optional, Set, Type, Union
 
@@ -703,14 +704,17 @@ class DataRequirement(Serializable):
 
     _KEY_CATEGORY = 'category'
     """ Serialization dictionary JSON key for ::attribute:`category` property value. """
+    _KEY_DERIVING_TASK_ID = 'derive_task_id'
     _KEY_DOMAIN = 'domain'
     """ Serialization dictionary JSON key for ::attribute:`domain_params` property value. """
     _KEY_FULFILLED_ACCESS_AT = 'fulfilled_access_at'
     """ Serialization dictionary JSON key for ::attribute:`fulfilled_access_at` property value. """
     _KEY_FULFILLED_BY = 'fulfilled_by'
     """ Serialization dictionary JSON key for ::attribute:`fulfilled_by` property value. """
+    _KEY_FULFILLMENT_CHECKED = 'fulfillment_checked'
     _KEY_IS_INPUT = 'is_input'
     """ Serialization dictionary JSON key for ::attribute:`is_input` property value. """
+    _KEY_REQUIRES_DERIVING = 'requires_deriving'
     _KEY_SIZE = 'size'
     """ Serialization dictionary JSON key for ::attribute:`size` property value. """
 
@@ -733,6 +737,9 @@ class DataRequirement(Serializable):
             domain = DataDomain.factory_init_from_deserialized_json(json_obj[cls._KEY_DOMAIN])
             category = DataCategory.get_for_name(json_obj[cls._KEY_CATEGORY])
             is_input = json_obj[cls._KEY_IS_INPUT]
+            fulfillment_checked = json_obj[cls._KEY_FULFILLMENT_CHECKED]
+            requires_deriving = json_obj.get(cls._KEY_REQUIRES_DERIVING, False)
+            derive_task_id = json_obj.get(cls._KEY_DERIVING_TASK_ID, None)
 
             opt_kwargs_w_defaults = dict()
             if cls._KEY_FULFILLED_BY in json_obj:
@@ -742,25 +749,35 @@ class DataRequirement(Serializable):
             if cls._KEY_FULFILLED_ACCESS_AT in json_obj:
                 opt_kwargs_w_defaults['fulfilled_access_at'] = json_obj[cls._KEY_FULFILLED_ACCESS_AT]
 
-            return cls(domain=domain, is_input=is_input, category=category, **opt_kwargs_w_defaults)
+            return cls(domain=domain, is_input=is_input, category=category, fulfillment_checked=fulfillment_checked,
+                       requires_deriving=requires_deriving, derive_task_id=derive_task_id, **opt_kwargs_w_defaults)
         except:
             return None
 
     def __eq__(self, other):
         return self.__class__ == other.__class__ and self.domain == other.domain and self.is_input == other.is_input \
-               and self.category == other.category
+               and self.category == other.category and self.fulfillment_checked == other.fulfillment_checked \
+               and self.requires_deriving == other.requires_deriving and self.derive_task_id == other.derive_task_id
 
     def __hash__(self):
-        return hash('{}-{}-{}'.format(hash(self.domain), self.is_input, self.category))
+        return hash('{}-{}-{}-{}-{}-{}'.format(hash(self.domain), self.is_input, self.category,
+                                               self.fulfillment_checked, self.requires_deriving,
+                                               ('' if self.derive_task_id is None else self.derive_task_id)))
 
     def __init__(self, domain: DataDomain, is_input: bool, category: DataCategory, size: Optional[int] = None,
-                 fulfilled_by: Optional[str] = None, fulfilled_access_at: Optional[str] = None):
+                 fulfilled_by: Optional[str] = None, fulfilled_access_at: Optional[str] = None,
+                 fulfillment_checked: bool = False, requires_deriving: bool = False,
+                 derive_task_id: Optional[str] = None):
         self._domain = domain
         self._is_input = is_input
         self._category = category
         self._size = size
         self._fulfilled_by = fulfilled_by
         self._fulfilled_access_at = fulfilled_access_at
+        self._derive_task_id = derive_task_id
+        # Do a little extra logic to make sure these values are set in a sane manner
+        self._requires_deriving = requires_deriving or derive_task_id is not None
+        self._fulfillment_checked = fulfillment_checked or self._requires_deriving
 
     @property
     def category(self) -> DataCategory:
@@ -773,6 +790,29 @@ class DataRequirement(Serializable):
             The category of data required.
         """
         return self._category
+
+    @property
+    def derive_task_id(self) -> Optional[str]:
+        """
+        The optional identifier for a dataset derivation tasks necessary to fulfill this requirement.
+
+        Note that the setter for this property will adjust the ::attribute:`requires_deriving` property, via its setter.
+
+        Returns
+        -------
+        Optional[str]
+            The identifier for a dataset derivation tasks necessary to fulfill this requirement, or ``None``.
+        """
+        return self._derive_task_id
+
+    @derive_task_id.setter
+    def derive_task_id(self, task_id: Optional[str]):
+        if task_id is None and self._derive_task_id is not None:
+            self.requires_deriving = False
+        elif task_id is not None:
+            self.requires_deriving = True
+
+        self._derive_task_id = task_id
 
     @property
     def domain(self) -> DataDomain:
@@ -820,6 +860,27 @@ class DataRequirement(Serializable):
         self._fulfilled_by = name
 
     @property
+    def fulfillment_checked(self) -> bool:
+        """
+        Whether a check is known to have been performed of whether this requirement can be fulfilled.
+
+        Note that ::attribute:`requires_deriving` must be ``False`` whenever ::attribute:`fulfillment_checked` is
+        ``False``, and ::attribute:`fulfillment_checked` must be ``True`` whenever ::attribute:`requires_deriving` is
+        ``True``.  Because of that, the property setter for ::attribute:`requires_deriving` will update
+        ::attribute:`fulfillment_checked` to ``True`` (regardless of the value passed to the setter).
+
+        Returns
+        -------
+        bool
+            Whether a check is known to have been performed of whether this requirement can be fulfilled.
+        """
+        return self._fulfillment_checked
+
+    @fulfillment_checked.setter
+    def fulfillment_checked(self, was_checked: bool):
+        self._fulfillment_checked = was_checked
+
+    @property
     def is_input(self) -> bool:
         """
         Whether this represents required input data, as opposed to a requirement for storing output data.
@@ -830,6 +891,28 @@ class DataRequirement(Serializable):
             Whether this represents required input data.
         """
         return self._is_input
+
+    @property
+    def requires_deriving(self) -> bool:
+        """
+        Whether this requirement is to be fulfilled by a dataset that will be, but is not yet, derived.
+
+        Note that ::attribute:`requires_deriving` must be ``False`` whenever ::attribute:`fulfillment_checked` is
+        ``False``, and ::attribute:`fulfillment_checked` must be ``True`` whenever ::attribute:`requires_deriving` is
+        ``True``.  Because of that, the property setter for ::attribute:`requires_deriving` will update
+        ::attribute:`fulfillment_checked` to ``True`` (regardless of the value passed to the setter).
+
+        Returns
+        -------
+        bool
+            Whether this requirement is to be fulfilled by a dataset that will be, but is not yet, derived.
+        """
+        return self._requires_deriving
+
+    @requires_deriving.setter
+    def requires_deriving(self, requires_deriving: bool):
+        self._fulfillment_checked = True
+        self._requires_deriving = requires_deriving
 
     @property
     def size(self) -> Optional[int]:
@@ -848,11 +931,15 @@ class DataRequirement(Serializable):
 
     def to_dict(self) -> Dict[str, Union[str, Number, dict, list]]:
         serial = {self._KEY_DOMAIN: self.domain.to_dict(), self._KEY_IS_INPUT: self.is_input,
-                  self._KEY_CATEGORY: self.category.name}
+                  self._KEY_CATEGORY: self.category.name, self._KEY_FULFILLMENT_CHECKED: self.fulfillment_checked}
         if self.size is not None:
             serial[self._KEY_SIZE] = self.size
         if self.fulfilled_by is not None:
             serial[self._KEY_FULFILLED_BY] = self.fulfilled_by
         if self.fulfilled_access_at is not None:
             serial[self._KEY_FULFILLED_ACCESS_AT] = self.fulfilled_access_at
+        if self.fulfillment_checked:
+            serial[self._KEY_REQUIRES_DERIVING] = self.requires_deriving
+        if self.derive_task_id is not None:
+            serial[self._KEY_DERIVING_TASK_ID] = self.derive_task_id
         return serial
