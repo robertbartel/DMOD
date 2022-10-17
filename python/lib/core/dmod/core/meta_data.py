@@ -64,6 +64,7 @@ class DataFormat(Enum):
     "pieces" (i.e., config files) of data may cover the exact same catchments and time period.  There must be a separate
     index that can be used to distinguish the collections, so that the right data can be identified.
     """
+
     AORC_CSV = (0,
                 {StandardDatasetIndex.CATCHMENT_ID: None, StandardDatasetIndex.TIME: ""},
                 {"": datetime, "APCP_surface": float, "DLWRF_surface": float, "DSWRF_surface": float,
@@ -72,6 +73,7 @@ class DataFormat(Enum):
                 True
                 )
     """ The CSV data format the Nextgen framework originally used during its early development. """
+
     NETCDF_FORCING_CANONICAL = (1,
                                 {StandardDatasetIndex.CATCHMENT_ID: None, StandardDatasetIndex.TIME: "time"},
                                 {"time": datetime, "RAINRATE": float, "T2D": float, "Q2D": float,
@@ -80,6 +82,7 @@ class DataFormat(Enum):
                                 True
                                 )
     """ The Nextgen framework "canonical" NetCDF forcing data format. """
+
     # TODO: need to look at actual format and fix this
     NETCDF_AORC_DEFAULT = (2,
                            {StandardDatasetIndex.CATCHMENT_ID: "ids", StandardDatasetIndex.TIME: "Time"},
@@ -88,29 +91,62 @@ class DataFormat(Enum):
                            True
                            )
     """ The default format for "raw" AORC forcing data. """
-    NGEN_OUTPUT = (3,
-                   {StandardDatasetIndex.CATCHMENT_ID: None, StandardDatasetIndex.TIME: None, StandardDatasetIndex.DATA_ID: None},
-                   None,
-                   True)
+
+    NGEN_OUTPUT = (
+        3,
+        {StandardDatasetIndex.CATCHMENT_ID: None, StandardDatasetIndex.TIME: None, StandardDatasetIndex.DATA_ID: None},
+        None,
+        True
+    )
     """ Representation of the format for Nextgen output, with unknown/unspecified configuration of output fields. """
+
     NGEN_REALIZATION_CONFIG = (
-        4, {StandardDatasetIndex.CATCHMENT_ID: None, StandardDatasetIndex.TIME: None, StandardDatasetIndex.DATA_ID: None}, None, True)
+        4, {
+            StandardDatasetIndex.CATCHMENT_ID: None, StandardDatasetIndex.TIME: None, StandardDatasetIndex.DATA_ID: None
+        },
+        None,
+        True
+    )
     """ Representation of the format of realization configs, which covers catchments (id) has a time period (time). """
-    NGEN_GEOJSON_HYDROFABRIC = (5,
-                                {StandardDatasetIndex.CATCHMENT_ID: "id", StandardDatasetIndex.HYDROFABRIC_ID: None, StandardDatasetIndex.DATA_ID: None},
-                                {"id": str, "properties": Any, "geometry": Any},
-                                )
+
+    NGEN_GEOJSON_HYDROFABRIC = (
+        5,
+        {
+            StandardDatasetIndex.CATCHMENT_ID: "id", StandardDatasetIndex.HYDROFABRIC_ID: None,
+            StandardDatasetIndex.DATA_ID: None, StandardDatasetIndex.VERSION: None
+        },
+        {"id": str, "properties": Any, "geometry": Any}
+    )
     """ GeoJSON hydrofabric format used by Nextgen (id is catchment id). """
-    NGEN_PARTITION_CONFIG = (6,
-                             {StandardDatasetIndex.DATA_ID: None, StandardDatasetIndex.HYDROFABRIC_ID: None, StandardDatasetIndex.LENGTH: None},
-                             {"id": int, "cat-ids": List[str], "nex-id": List[str], "remote-connections": List[Dict[str, int]]},
-                             )
+
+    NGEN_PARTITION_CONFIG = (
+        6,
+        {
+            StandardDatasetIndex.DATA_ID: None, StandardDatasetIndex.HYDROFABRIC_ID: None,
+            StandardDatasetIndex.LENGTH: None
+        },
+        {"id": int, "cat-ids": List[str], "nex-id": List[str], "remote-connections": List[Dict[str, int]]}
+    )
     """ GeoJSON hydrofabric format used by Nextgen. """
+
     BMI_CONFIG = (7, {StandardDatasetIndex.GLOBAL_CHECKSUM: None, StandardDatasetIndex.DATA_ID: None}, None)
     """ Format for BMI init configs, of which (in general) there is implied comma-joined filename string checksum. """
-    NWM_OUTPUT = (8, {StandardDatasetIndex.CATCHMENT_ID: None, StandardDatasetIndex.TIME: "Time", StandardDatasetIndex.DATA_ID: None}, {"Time": datetime, "streamflow": float}, True)
+
+    NWM_OUTPUT = (
+        8,
+        {
+            StandardDatasetIndex.CATCHMENT_ID: None, StandardDatasetIndex.TIME: "Time",
+            StandardDatasetIndex.DATA_ID: None
+        },
+        {"Time": datetime, "streamflow": float},
+        True)
     """ Format for NWM 2.0/2.1/2.2 output. """
-    NWM_CONFIG = (9, {StandardDatasetIndex.ELEMENT_ID: None, StandardDatasetIndex.TIME: None, StandardDatasetIndex.DATA_ID: None}, None)
+
+    NWM_CONFIG = (
+        9,
+        {StandardDatasetIndex.ELEMENT_ID: None, StandardDatasetIndex.TIME: None, StandardDatasetIndex.DATA_ID: None},
+        None
+    )
     """ Format for initial config for NWM 2.0/2.1/2.2. """
     PARTITIONED_NGEN_GEOJSON_HYDROFABRIC = (
         10,
@@ -122,6 +158,7 @@ class DataFormat(Enum):
         {"id": str, "properties": Any, "geometry": Any}
     )
     """ Format for subdivided/partitioned hydrofabrics derived from those of ``NGEN_GEOJSON_HYDROFABRIC`` format. """
+
     # TODO: consider whether a datetime format string is necessary for each type value
     # TODO: consider whether something to indicate the time step size is necessary
     # TODO: need format specifically for Nextgen model output (i.e., for evaluations)
