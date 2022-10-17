@@ -22,6 +22,10 @@ class StandardDatasetIndex(Enum):
     """ Index for some type of dataset-scope checksum. """
     ELEMENT_ID = (6, str)
     """ A general-purpose index for the applicable data element unique identifier. """
+    VERSION = (7, str)
+    """ Index to distinguish format variations with differences important to data usage but not dataset management. """
+    PARTITION_CONFIG_DATA_ID = (8, str)
+    """ The data_id of an associated partition config data (important for subdivided/partitioned hydrofabrics). """
 
     @classmethod
     def get_for_name(cls, name_str: str) -> 'StandardDatasetIndex':
