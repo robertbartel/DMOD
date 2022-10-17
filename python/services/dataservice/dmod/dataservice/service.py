@@ -186,7 +186,8 @@ class DockerS3FSPluginHelper(SimpleDockerUtil):
                            retries=5,
                            start_period=to_nanoseconds(seconds=5))
 
-
+# TODO: look at splitting up the functionality within this type (things for working with the datasets and managers,
+#  versus things for listening for requests and other async task functions)
 class ServiceManager(WebSocketInterface):
     """
     Primary service management class.
@@ -1054,6 +1055,50 @@ class ServiceManager(WebSocketInterface):
                 self._job_util.unlock_active_jobs(lock_id)
 
             await asyncio.sleep(5)
+
+    def _queue_dataset_derivation(self, job: Job):
+        """
+        Add to the queue of dataset derivations that need to be performed.
+
+        Parameters
+        ----------
+        job: Job
+        """
+        # TODO: create something which queues within Redis to do the derivation task/job
+        for requirement in [req for req in job.data_requirements if req.requires_deriving]:
+            # TODO: make this a complete Job type that more generally supports other scenarios
+            # For now, only subdividing a hydrofabric is supported
+            if requirement.domain.data_format == DataFormat.PARTITIONED_NGEN_GEOJSON_HYDROFABRIC:
+
+
+    async def manage_dataset_derivations(self):
+        """
+        Task method to periodically perform any queued dataset derivations.
+        """
+        # TODO: make as separate managed async task
+        # TODO: implement after figuring out queue and queue element details within Redis
+
+        while True:
+            lock_id = str(uuid4())
+            while not self._job_util.lock_active_jobs(lock_id):
+                await asyncio.sleep(2)
+
+            try:
+                for job in [j for j in self._job_util.get_all_active_jobs() if
+                            j.status_step == JobExecStep.AWAITING_DATA and any(
+                                    [req.requires_deriving for req in j.data_requirements])]:
+                    # TODO: clear any derive task id and the requires_deriving property once a derivation is finished
+
+
+
+
+                    pass
+            finally:
+                self._job_util.unlock_active_jobs(lock_id)
+
+            await asyncio.sleep(5)
+
+
 
     async def perform_checks_for_job(self, job: Job) -> bool:
         """

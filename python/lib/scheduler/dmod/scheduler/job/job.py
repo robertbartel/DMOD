@@ -333,6 +333,7 @@ class JobStatus(Serializable):
         return serial
 
 
+# TODO: split Job interface up slightly to separate more abstract job type from job type for modeling jobs
 class Job(Serializable, ABC):
     """
     An abstract interface for a job performed by the MaaS system.
@@ -688,6 +689,7 @@ class Job(Serializable, ABC):
         pass
 
 
+# TODO: an implementation of the output_formats property getter must be provided
 class JobImpl(Job):
     """
     Basic implementation of ::class:`Job`
