@@ -595,6 +595,35 @@ class DataDomain(Serializable):
         """
         return self._data_format
 
+    def get_singular_restriction_value(self, val_index: StandardDatasetIndex):
+        """
+        Get the value of a discrete restriction expected to have exactly one item in its list of values.
+
+        Parameters
+        ----------
+        val_index : StandardDatasetIndex
+            The index of the restriction of interest.
+
+        Returns
+        -------
+        The value of interest.
+
+        Raises
+        -------
+        DmodRuntimeError
+            Raised if the domain does not have a discrete restriction for this index or the restriction does not have
+            exactly one item in its list of values.
+        """
+        rest_list = [r for r_idx, r in self.discrete_restrictions.items() if r_idx == val_index]
+        if len(rest_list) == 0:
+            raise DmodRuntimeError("Domain missing single-valued restriction with index {}".format(val_index.name))
+        elif len(rest_list[0].values) == 0:
+            raise DmodRuntimeError("Expected single-valued domain restriction {} has no values".format(val_index.name))
+        elif len(rest_list[0].values) > 1:
+            raise DmodRuntimeError("Domain restriction {} unexpectedly has multiple values".format(val_index.name))
+        else:
+            return rest_list[0].values[0]
+
     @property
     def indices(self) -> List[str]:
         """
