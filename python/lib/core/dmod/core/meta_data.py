@@ -111,6 +111,16 @@ class DataFormat(Enum):
     """ Format for NWM 2.0/2.1/2.2 output. """
     NWM_CONFIG = (9, {StandardDatasetIndex.ELEMENT_ID: None, StandardDatasetIndex.TIME: None, StandardDatasetIndex.DATA_ID: None}, None)
     """ Format for initial config for NWM 2.0/2.1/2.2. """
+    PARTITIONED_NGEN_GEOJSON_HYDROFABRIC = (
+        10,
+        {
+            StandardDatasetIndex.CATCHMENT_ID: "id", StandardDatasetIndex.HYDROFABRIC_ID: None,
+            StandardDatasetIndex.DATA_ID: None, StandardDatasetIndex.VERSION: None,
+            StandardDatasetIndex.PARTITION_CONFIG_DATA_ID: None, StandardDatasetIndex.LENGTH: None
+        },
+        {"id": str, "properties": Any, "geometry": Any}
+    )
+    """ Format for subdivided/partitioned hydrofabrics derived from those of ``NGEN_GEOJSON_HYDROFABRIC`` format. """
     # TODO: consider whether a datetime format string is necessary for each type value
     # TODO: consider whether something to indicate the time step size is necessary
     # TODO: need format specifically for Nextgen model output (i.e., for evaluations)
