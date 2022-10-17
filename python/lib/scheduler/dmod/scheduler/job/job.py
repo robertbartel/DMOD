@@ -5,7 +5,7 @@ from numbers import Number
 from dmod.core.execution import AllocationParadigm
 from dmod.communication import ExternalRequest, ModelExecRequest, NGENRequest, SchedulerRequestMessage
 from dmod.core.serializable import Serializable
-from dmod.core.meta_data import DataRequirement
+from dmod.core.meta_data import DataFormat, DataRequirement
 from dmod.modeldata.hydrofabric import PartitionConfig
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, TYPE_CHECKING, Union
@@ -562,6 +562,19 @@ class Job(Serializable, ABC):
         -------
         ExternalRequest
             The underlying configuration for the model execution that is being requested.
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def output_formats(self) -> List[DataFormat]:
+        """
+        List of the formats of each required output dataset for the requested job.
+
+        Returns
+        -------
+        List[DataFormat]
+            List of the formats of each required output dataset for the requested job.
         """
         pass
 
