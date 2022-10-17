@@ -8,7 +8,8 @@ from dmod.communication import DatasetManagementMessage, DatasetManagementRespon
     ManagementAction, WebSocketInterface
 from dmod.communication.dataset_management_message import DatasetQuery, QueryType
 from dmod.communication.data_transmit_message import DataTransmitMessage, DataTransmitResponse
-from dmod.core.meta_data import DataCategory, DataDomain, DataRequirement, DiscreteRestriction, StandardDatasetIndex
+from dmod.core.meta_data import DataCategory, DataDomain, DataFormat, DataRequirement, DiscreteRestriction, \
+    StandardDatasetIndex
 from dmod.core.serializable import ResultIndicator, BasicResultIndicator
 from dmod.core.exception import DmodRuntimeError
 from dmod.modeldata.data.object_store_manager import Dataset, DatasetManager, DatasetType, ObjectStoreDatasetManager
@@ -258,6 +259,51 @@ class ServiceManager(WebSocketInterface):
         for dataset_type in manager.supported_dataset_types:
             self._all_data_managers[dataset_type] = manager
 
+    def _associate_datasets(self, job: Job):
+        """
+        Associate datasets for this job as needed so the scheduler will be able to make them accessible to workers.
+
+        This includes preparing any Docker volumes using the S3FS custom storage driver.  It also includes setting the
+        volume name or host directory path in requirements' ::class:`DataRequirement.fulfilled_access_at` property.
+
+        Parameters
+        ----------
+        job: Job
+            The job to have datasets provisioned and linked.
+
+        """
+        logging.debug("Managing provisioning for job {} that is awaiting data.".format(job.job_id))
+
+        # TODO: (later) in the future, whether the job is running via Docker needs to be checked
+        is_job_run_in_docker = True
+
+        if is_job_run_in_docker:
+            # Initialize the access location properties of the datasets
+            # TODO: also, whatever is done here needs to align with what is done within _create_output_dataset,
+            #  when creating the output data DataRequirement
+            for requirement in [req for req in job.data_requirements]:
+                dataset = self.get_known_datasets()[requirement.fulfilled_by]
+                requirement.fulfilled_access_at = dataset.docker_mount
+
+            # Initialize dataset S3FS-based Docker volumes required for a job
+            try:
+                logging.debug('Initializing any required S3FS dataset volumes for {}'.format(job.job_id))
+                self._docker_s3fs_helper.init_volumes(job=job)
+            except Exception as e:
+                job.status_step = JobExecStep.DATA_FAILURE
+                self._job_util.save_job(job)
+                return
+
+        else:
+            msg = "Failed provision datasets of job {}: currently only Docker jobs are supported"
+            logging.error(msg.format(job.job_id))
+            job.status_step = JobExecStep.DATA_FAILURE
+            self._job_util.save_job(job)
+            return
+
+        job.status_step = JobExecStep.AWAITING_SCHEDULING
+        self._job_util.save_job(job)
+
     async def _async_can_dataset_be_derived(self, requirement: DataRequirement) -> bool:
         """
         Asynchronously determine if a dataset can be derived from existing datasets to fulfill this requirement.
@@ -506,7 +552,7 @@ class ServiceManager(WebSocketInterface):
         job : Job
             The job for which to create output datasets.
         """
-        for i in range(len(job.model_request.output_formats)):
+        for i in range(len(job.output_formats)):
 
             id_restrict = DiscreteRestriction(variable=StandardDatasetIndex.ELEMENT_ID, values=[])
 
@@ -522,11 +568,11 @@ class ServiceManager(WebSocketInterface):
             dataset = mgr.create(name='job-{}-output-{}'.format(job.job_id, i),
                                  is_read_only=False,
                                  category=DataCategory.OUTPUT,
-                                 domain=DataDomain(data_format=job.model_request.output_formats[i],
+                                 domain=DataDomain(data_format=job.output_formats[i],
                                                    continuous_restrictions=None if time_range is None else [time_range],
                                                    discrete_restrictions=[id_restrict]))
             # TODO: (later) in the future, whether the job is running via Docker needs to be checked
-            # TODO: also, whatever is done here needs to align with what is done within perform_checks_for_job, when
+            # TODO: also, whatever is done here needs to align with what is done within manage_data_provision, when
             #  setting the fulfilled_access_at for the DataRequirement
             is_job_run_in_docker = True
             if is_job_run_in_docker:
@@ -732,6 +778,25 @@ class ServiceManager(WebSocketInterface):
         bool
             Whether it is possible for a dataset to be derived from existing datasets to fulfill these requirements.
         """
+
+        if requirement.domain.data_format == DataFormat.PARTITIONED_NGEN_GEOJSON_HYDROFABRIC:
+            # TODO: this logic may need to be put into a separate function, as we likely need it when actually deriving
+            try:
+                hf_id = requirement.domain.get_singular_restriction_value(StandardDatasetIndex.HYDROFABRIC_ID)
+            except DmodRuntimeError as e:
+                msg = "Can't determine derivability of {} dataset: failure getting {} of requirement (exception was {})"
+                logging.error(msg.format(requirement.domain.data_format.name, StandardDatasetIndex.HYDROFABRIC_ID, e))
+                return False
+
+            # Examine all unpartitioned GeoJSON hydrofabrics for one of the right id
+            for ds in [d for name, d in self.get_known_datasets().items() if
+                       d.category == requirement.category and d.data_format == DataFormat.NGEN_GEOJSON_HYDROFABRIC]:
+                try:
+                    if hf_id == ds.data_domain.get_singular_restriction_value(StandardDatasetIndex.HYDROFABRIC_ID):
+                        return True
+                except DmodRuntimeError as e:
+                    msg = "Encountered {} searching for source {} dataset to derive ({})"
+                    logging.warning(msg.format(e.__class__.__name__, requirement.domain.data_format.name, e))
         return False
 
     def find_dataset_for_requirement(self, requirement: DataRequirement) -> Optional[Dataset]:
@@ -953,7 +1018,10 @@ class ServiceManager(WebSocketInterface):
                     logging.info("All required data for {} is available.".format(job.job_id))
                     # Before moving to next successful step, also create output datasets and requirement entries
                     self._create_output_datasets(job)
-                    job.status_step = JobExecStep.AWAITING_PARTITIONING
+                    if job.is_partitionable:
+                        job.status_step = JobExecStep.AWAITING_PARTITIONING
+                    else:
+                        job.status_step = JobExecStep.AWAITING_ALLOCATION
                 else:
                     logging.error("Some or all required data for {} is unprovideable.".format(job.job_id))
                     job.status_step = JobExecStep.DATA_UNPROVIDEABLE
@@ -975,23 +1043,16 @@ class ServiceManager(WebSocketInterface):
             lock_id = str(uuid4())
             while not self._job_util.lock_active_jobs(lock_id):
                 await asyncio.sleep(2)
+            try:
+                for job in [j for j in self._job_util.get_all_active_jobs() if
+                            j.status_step == JobExecStep.AWAITING_DATA]:
+                    if any([req.requires_deriving for req in job.data_requirements]):
+                        self._queue_dataset_derivation(job=job)
+                    else:
+                        self._associate_datasets(job=job)
+            finally:
+                self._job_util.unlock_active_jobs(lock_id)
 
-            for job in [j for j in self._job_util.get_all_active_jobs() if j.status_step == JobExecStep.AWAITING_DATA]:
-                logging.debug("Managing provisioning for job {} that is awaiting data.".format(job.job_id))
-
-                # Initialize dataset Docker volumes required for a job
-                try:
-                    logging.debug('Initializing any required S3FS dataset volumes for {}'.format(job.job_id))
-                    self._docker_s3fs_helper.init_volumes(job=job)
-                except Exception as e:
-                    job.status_step = JobExecStep.DATA_FAILURE
-                    self._job_util.save_job(job)
-                    continue
-
-                job.status_step = JobExecStep.AWAITING_SCHEDULING
-                self._job_util.save_job(job)
-
-            self._job_util.unlock_active_jobs(lock_id)
             await asyncio.sleep(5)
 
     async def perform_checks_for_job(self, job: Job) -> bool:
@@ -1021,21 +1082,14 @@ class ServiceManager(WebSocketInterface):
         try:
             for requirement in [req for req in job.data_requirements if req.fulfilled_by is None]:
                 can_fulfill, dataset = await self.can_be_fulfilled(requirement)
-
+                requirement.fulfillment_checked = True
                 if not can_fulfill:
                     logging.error("Cannot fulfill '{}' category data requirement".format(requirement.category.name))
                     return False
                 elif dataset is not None:
-                    # TODO: (later) in the future, whether the job is running via Docker needs to be checked
-                    # TODO: also, whatever is done here needs to align with what is done within _create_output_dataset,
-                    #  when creating the output data DataRequirement
-                    is_job_run_in_docker = True
-                    if is_job_run_in_docker:
-                        requirement.fulfilled_access_at = dataset.docker_mount
-                    else:
-                        msg = "Could not determine proper access location for dataset of type {} by non-Docker job {}."
-                        raise DmodRuntimeError(msg.format(dataset.__class__.__name__, job.job_id))
                     requirement.fulfilled_by = dataset.name
+                else:
+                    requirement.requires_deriving = True
             return True
         except Exception as e:
             msg = "Encountered {} checking if job {} data requirements could be fulfilled - {}"
