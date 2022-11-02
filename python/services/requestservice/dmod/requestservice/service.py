@@ -10,7 +10,8 @@ from websockets import WebSocketServerProtocol
 
 from dmod.access import DummyAuthUtil, RedisBackendSessionManager
 from dmod.communication import AbstractInitRequest, InvalidMessageResponse, MessageEventType, NGENRequest, NWMRequest, \
-    PartitionRequest, WebSocketSessionsInterface, SessionInitMessage, SchedulerClient, UnsupportedMessageTypeResponse
+    NgenCalibrationRequest, PartitionRequest, WebSocketSessionsInterface, SessionInitMessage, SchedulerClient, \
+    UnsupportedMessageTypeResponse
 from dmod.communication.dataset_management_message import MaaSDatasetManagementMessage
 from dmod.externalrequests import AuthHandler, DatasetRequestHandler, ModelExecRequestHandler, \
     NgenCalibrationRequestHandler, PartitionRequestHandler
@@ -39,7 +40,9 @@ class RequestService(WebSocketSessionsInterface):
     server:
         websocket server
     """
-    _PARSEABLE_REQUEST_TYPES = [SessionInitMessage, NWMRequest, NGENRequest, MaaSDatasetManagementMessage, PartitionRequest]
+    # TODO: later do some testing to make sure (especially for calibration message) these cannot cross deserialize
+    _PARSEABLE_REQUEST_TYPES = [SessionInitMessage, NgenCalibrationRequest, NWMRequest, NGENRequest,
+                                MaaSDatasetManagementMessage, PartitionRequest]
     """ Parseable request types, which are all authenticated ::class:`ExternalRequest` subtypes for this implementation. """
 
     @classmethod
