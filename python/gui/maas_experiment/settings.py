@@ -139,6 +139,26 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, "static/")
+NGEN_STATIC_ROOT = os.path.join(STATIC_ROOT, "ngen/")
+HYDROFABRIC_ROOT = os.path.join(NGEN_STATIC_ROOT, "hydrofabric/")
+DATA_CACHE_DIR = os.path.join(STATIC_ROOT, "cache/")
+DATA_DOWNLOADS_DIR = os.path.join(DATA_CACHE_DIR, "downloads/")
+DATA_UPLOADS_DIR = os.path.join(DATA_CACHE_DIR, "uploads/")
+SECRETS_ROOT = '/run/secrets/'
+
+
+MINIO_HOSTNAME = os.environ.get("OBJECT_STORE_HOSTNAME")
+MINIO_PORT = os.environ.get("OBJECT_STORE_PORT")
+MINIO_HOST_STRING = "{}:{}".format(MINIO_HOSTNAME, MINIO_PORT)
+
+MINIO_ACCESS_DOCKER_SECRET_NAME = 'object_store_exec_user_name'
+MINIO_SECRET_DOCKER_SECRET_NAME: str = 'object_store_exec_user_passwd'
+
+MINIO_ACCESS_FILE = os.path.join(SECRETS_ROOT, MINIO_ACCESS_DOCKER_SECRET_NAME)
+MINIO_SECRET_FILE = os.path.join(SECRETS_ROOT, MINIO_SECRET_DOCKER_SECRET_NAME)
+
+# TODO adjust this to be configurable
+MINIO_SECURE_CONNECT = False
 
 
 def ensure_required_environment_variables():
