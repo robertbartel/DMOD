@@ -13,9 +13,6 @@ class DmodJobRequest(AbstractInitRequest, ABC):
 
     # TODO: this also needs to include cpu count, memory, allocation paradigm, and perhaps other things
 
-    def __init__(self, *args, **kwargs):
-        super(DmodJobRequest, self).__init__(*args, **kwargs)
-
     @property
     @abstractmethod
     def data_requirements(self) -> List[DataRequirement]:
