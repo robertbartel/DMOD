@@ -4,6 +4,7 @@ from .maas_request import ModelExecRequest
 from .maas_request.dmod_job_request import DmodJobRequest
 from .message import AbstractInitRequest, MessageEventType, Response
 from .scheduler_request_response_body import SchedulerRequestResponseBody, UNSUCCESSFUL_JOB
+from .serializable_dict import SerializableDict
 from pydantic import Field, PrivateAttr, validator
 from typing import ClassVar, Dict, List, Optional, Type, Union
 
