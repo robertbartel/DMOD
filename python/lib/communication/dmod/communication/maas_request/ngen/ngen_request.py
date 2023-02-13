@@ -1,6 +1,7 @@
+import json
 from numbers import Number
 
-from typing import Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 from dmod.core.meta_data import (
     DataCategory,
@@ -16,6 +17,9 @@ from ..model_exec_request_response import ModelExecRequestResponse
 
 
 class NGENRequest(ModelExecRequest):
+    """
+    Request the execution of a NextGen job.
+    """
 
     event_type = MessageEventType.MODEL_EXEC_REQUEST
     """(:class:`MessageEventType`) The type of event for this message"""
@@ -79,6 +83,9 @@ class NGENRequest(ModelExecRequest):
                     "model"
                 ]["partition_config_data_id"]
 
+            if "formulations" in json_obj["model"]:
+                optional_kwargs_w_defaults["formulations"] = json_obj["model"]["formulations"]
+
             additional_kw_args = cls._additional_deserialized_args(json_obj)
 
             for key, val in optional_kwargs_w_defaults.items():
@@ -119,19 +126,20 @@ class NGENRequest(ModelExecRequest):
 
     def __eq__(self, other):
         return (
-            self.time_range == other.time_range
-            and self.hydrofabric_data_id == other.hydrofabric_data_id
-            and self.hydrofabric_uid == other.hydrofabric_uid
-            and self.config_data_id == other.config_data_id
-            and self.bmi_config_data_id == other.bmi_config_data_id
-            and self.session_secret == other.session_secret
-            and self.cpu_count == other.cpu_count
-            and self.partition_cfg_data_id == other.partition_cfg_data_id
-            and self.catchments == other.catchments
+                self.time_range == other.time_range
+                and self.hydrofabric_data_id == other.hydrofabric_data_id
+                and self.hydrofabric_uid == other.hydrofabric_uid
+                and self.config_data_id == other.config_data_id
+                and self.bmi_config_data_id == other.bmi_config_data_id
+                and self.session_secret == other.session_secret
+                and self.cpu_count == other.cpu_count
+                and self.partition_cfg_data_id == other.partition_cfg_data_id
+                and self.catchments == other.catchments
+                and self.formulation_configs == other.formulation_configs
         )
 
     def __hash__(self):
-        hash_str = "{}-{}-{}-{}-{}-{}-{}-{}-{}".format(
+        hash_str = "{}-{}-{}-{}-{}-{}-{}-{}-{}-{}".format(
             self.time_range.to_json(),
             self.hydrofabric_data_id,
             self.hydrofabric_uid,
@@ -140,6 +148,7 @@ class NGENRequest(ModelExecRequest):
             self.session_secret,
             self.cpu_count,
             self.partition_cfg_data_id,
+            json.dumps(self.formulation_configs, sort_keys=True),
             ",".join(self.catchments),
         )
         return hash(hash_str)
@@ -152,11 +161,18 @@ class NGENRequest(ModelExecRequest):
         bmi_cfg_data_id: str,
         catchments: Optional[Union[Set[str], List[str]]] = None,
         partition_cfg_data_id: Optional[str] = None,
+        formulations: Optional[Dict[str, Any]] = None,        # TODO: figure out if this is the best type selection
         *args,
         **kwargs
     ):
         """
         Initialize an instance.
+
+        This type must either include a reference to an existing dataset holding a realization configuration - passed
+        via the ``config_data_id`` keyword arg and accessed with the ::attribute:`realization_config_data_id` property -
+        or a partial realization configuration within the ``formulations`` param.  When the latter is the case, the
+        message represents a request that will require the creation of a new realization config dataset at the
+        ``AWAITING_DATA`` job status step.
 
         Parameters
         ----------
@@ -167,24 +183,41 @@ class NGENRequest(ModelExecRequest):
         hydrofabric_data_id : str
             A data identifier for the hydrofabric, for distinguishing between different hydrofabrics that cover the same
             set of catchments and nexuses (i.e., the same sets of catchment and nexus ids).
+        bmi_cfg_data_id : str
+            The BMI init config ``data_id`` index, for identifying the particular BMI init config datasets
+            applicable to this request.
         catchments : Optional[Union[Set[str], List[str]]]
             An optional collection of the catchment ids to narrow the geospatial domain, where the default of ``None``
             or an empty collection implies all catchments in the hydrofabric.
-        bmi_cfg_data_id : Optional[str]
-            The optioanl BMI init config ``data_id`` index, for identifying the particular BMI init config datasets
-            applicable to this request.
+        partition_cfg_data_id : Optional[str]
+            The optional ``data_id`` of an existing dataset containing a partitioning config that should be used in the
+            requested job.
+        formulations : Optional[dict]
+            A semi-optional (see description) object representing one or more formulation configurations, used to create
+            a ``PARTIAL_NGEN_REALIZATION_CONFIG`` format dataset.
 
         Keyword Args
         -----------
-        config_data_id : str
-            The config data id index, for identifying the particular configuration datasets applicable to this request.
+        config_data_id : Optional[str]
+            The semi-optional (see description) config data id index, for identifying the primary configuration datasets
+            applicable to this request, as required by ::class:`ModelExecRequest` superclass (used for the
+            ::attribute:`realization_config_data_id`).
+        cpu_count : Optional[int]
+            The requested number of CPUs to use, from ::class:`ModelExecRequest` superclass.
         session_secret : str
-            The session secret for the right session when communicating with the MaaS request handler
+            The session secret for the right session when communicating with the MaaS request handler, as required by
+            ::class:`ExternalRequest` superclass.
         """
+        if formulations is not None and 'config_data_id' not in kwargs and len(args) < 1:
+            kwargs['config_data_id'] = 'dynamic_realization_config_{}'.format(str(hash(formulations)))
         super().__init__(*args, **kwargs)
+        # TODO: (#needs_issue) this is not necessary for all cases any longer (it generally is part of the realization
+        #  config, though it is still needed for partial)
         self._time_range = time_range
+        # TODO: (#needs_issue) these need to be adjusted in a way that accounts for having more than one hydrofabric
         self._hydrofabric_uid = hydrofabric_uid
         self._hydrofabric_data_id = hydrofabric_data_id
+        # TODO: (#needs_issue) this needs to be updated to accommodate multiple BMI config datasets
         self._bmi_config_data_id = bmi_cfg_data_id
         self._part_config_data_id = partition_cfg_data_id
         # Convert an initial list to a set to remove duplicates
@@ -203,6 +236,7 @@ class NGENRequest(ModelExecRequest):
         self._realization_cfg_data_requirement = None
         self._bmi_cfg_data_requirement = None
         self._partition_cfg_data_requirement = None
+        self._formulations = formulations
 
     def _gen_catchments_domain_restriction(
         self, var_name: str = "catchment_id"
@@ -303,6 +337,25 @@ class NGENRequest(ModelExecRequest):
         return self._catchments
 
     @property
+    def formulation_configs(self) -> Optional[Dict[str, Any]]:
+        """
+        Optional, partial NextGen realization config with catchment formulations but not other things like forcings.
+
+        When present, this carries a partial realization config, with information provided by user input.  It is
+        subsequently used by DMOD to generate a full realization config for the requested job.
+
+        Returns
+        -------
+        Optional[Dict[str, Any]]
+            The user-supplied pieces of the NextGen realization config to use for this request.
+
+        See Also
+        -------
+
+        """
+        return self._formulations
+
+    @property
     def forcing_data_requirement(self) -> DataRequirement:
         """
         A requirement object defining of the forcing data needed to execute this request.
@@ -383,6 +436,21 @@ class NGENRequest(ModelExecRequest):
         return self._hydrofabric_uid
 
     @property
+    def is_intelligent_request(self) -> bool:
+        """
+        Whether this request requires some of DMOD's intelligent automation.
+
+        Whether this request required some intelligence be applied by DMOD, as the details of the requirements are only
+        partially explicitly defined, but can (in principle) be determined by examine the currently stored datasets.
+
+        Returns
+        -------
+        bool
+            Whether this request requires some of DMOD's intelligent automation.
+        """
+        return self._formulations is not None
+
+    @property
     def use_parallel_ngen(self) -> bool:
         """
         Whether this request specifies to use the variant of the NextGen framework compiled for parallel execution.
@@ -427,8 +495,6 @@ class NGENRequest(ModelExecRequest):
         use_parallel_ngen
         """
         return self.cpu_count == 1
-
-
 
     @property
     def output_formats(self) -> List[DataFormat]:
@@ -599,6 +665,8 @@ class NGENRequest(ModelExecRequest):
             model["catchments"] = self.catchments
         if self.partition_cfg_data_id is not None:
             model["partition_config_data_id"] = self.partition_cfg_data_id
+        if self.formulation_configs is not None:
+            model["formulations"] = self.formulation_configs
 
         return {"model": model, "session-secret": self.session_secret}
 
