@@ -99,6 +99,10 @@ class ModelExecRequest(ExternalRequest, DmodJobRequest, ABC):
 
         Parameters
         ----------
+        config_data_id : str
+            The data_id for the primary config dataset.
+        cpu_count : Optional[int]
+            The requested number of CPUs to use.
         session_secret : str
             The session secret for the right session when communicating with the request handler.
         """
