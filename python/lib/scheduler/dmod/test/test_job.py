@@ -2,7 +2,7 @@ import unittest
 from ..scheduler.job.job import Job, JobImpl, RequestedJob
 from dmod.core.meta_data import TimeRange
 from dmod.communication import NWMRequest, NGENRequest, SchedulerRequestMessage
-from typing import Any, List, TYPE_CHECKING
+from typing import Any, Dict, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from dmod.communication import ModelExecRequest
