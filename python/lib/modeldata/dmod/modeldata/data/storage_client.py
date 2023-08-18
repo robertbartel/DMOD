@@ -17,7 +17,7 @@ class DataStorageClient(Generic[DATA, ITEM_ID], ABC):
     """
 
     @abstractmethod
-    def delete_item(self, item_id: ITEM_ID) -> bool:
+    def delete_item(self, item_id: ITEM_ID, **kwargs) -> bool:
         """
         Delete the item with the given item identifier.
 
@@ -25,6 +25,7 @@ class DataStorageClient(Generic[DATA, ITEM_ID], ABC):
         ----------
         item_id : ITEM_ID
             The identifier for the item to delete.
+        kwargs
 
         Returns
         -------
@@ -34,9 +35,13 @@ class DataStorageClient(Generic[DATA, ITEM_ID], ABC):
         pass
 
     @abstractmethod
-    def list_items(self) -> List[ITEM_ID]:
+    def list_items(self, **kwargs) -> List[ITEM_ID]:
         """
         List the available, existing items this client can access.
+
+        Parameters
+        ----------
+        kwargs
 
         Returns
         -------
@@ -46,7 +51,7 @@ class DataStorageClient(Generic[DATA, ITEM_ID], ABC):
         pass
 
     @abstractmethod
-    def read_item(self, item_id: ITEM_ID) -> DATA:
+    def read_item(self, item_id: ITEM_ID, **kwargs) -> DATA:
         """
         Read and return the data item.
 
@@ -54,6 +59,7 @@ class DataStorageClient(Generic[DATA, ITEM_ID], ABC):
         ----------
         item_id : ITEM_ID
             The unique item identifier.
+        kwargs
 
         Returns
         -------
@@ -63,7 +69,7 @@ class DataStorageClient(Generic[DATA, ITEM_ID], ABC):
         pass
 
     @abstractmethod
-    def save_item(self, data: DATA, item_id: ITEM_ID, overwrite: bool = False) -> bool:
+    def save_item(self, data: DATA, item_id: ITEM_ID, overwrite: bool = False, **kwargs) -> bool:
         """
         Save the provided data as an entire item with the given item identifier.
 
@@ -75,6 +81,7 @@ class DataStorageClient(Generic[DATA, ITEM_ID], ABC):
             The identifier for the item to save, which implies a storage location.
         overwrite : bool
             Whether an existing item with the given identifier should be overwritten (``False`` by default).
+        kwargs
 
         Returns
         -------
@@ -98,7 +105,7 @@ class FileSystemStorageClient(DataStorageClient[str, Path]):
         self._base_dir: Path = base_directory if base_directory is not None else Path.root
         # TODO: sanity check base_dir
 
-    def delete_item(self, item_id: Path) -> bool:
+    def delete_item(self, item_id: Path, **kwargs) -> bool:
         """
         Delete the item with the given item identifier.
 
@@ -106,24 +113,37 @@ class FileSystemStorageClient(DataStorageClient[str, Path]):
         ----------
         item_id : ITEM_ID
             The path to the item to delete.
+        kwargs
+
+        Keyword Args
+        -------
+        missing_ok : bool
+            Optional param that, when set to ``True``, makes the function return ``True`` if the item to delete does not
+            initially exist (effectively ``False`` if not provided).
 
         Returns
         -------
         bool
             Whether the delete was successful.
         """
-        if item_id.exists() and item_id.is_file():
+        if not item_id.exists():
+            return kwargs.get("missing_ok", False)
+        elif item_id.is_file():
             try:
-                item_id.unlink()
+                item_id.unlink(missing_ok=kwargs.get("missing_ok", False))
             except Exception:
                 return False
             return not item_id.exists()
         else:
             return False
 
-    def list_items(self) -> List[Path]:
+    def list_items(self, **kwargs) -> List[Path]:
         """
         List the available, existing files under this instance's base directory.
+
+        Parameters
+        ----------
+        kwargs
 
         Returns
         -------
@@ -132,7 +152,7 @@ class FileSystemStorageClient(DataStorageClient[str, Path]):
         """
         return [f for f in self._base_dir.rglob('*') if f.is_file()]
 
-    def read_item(self, item_id: Path) -> str:
+    def read_item(self, item_id: Path, **kwargs) -> str:
         """
         Read and return the data item.
 
@@ -140,6 +160,7 @@ class FileSystemStorageClient(DataStorageClient[str, Path]):
         ----------
         item_id : Path
             The path to the data item.
+        kwargs
 
         Returns
         -------
@@ -148,7 +169,7 @@ class FileSystemStorageClient(DataStorageClient[str, Path]):
         """
         return item_id.read_text()
 
-    def save_item(self, data: str, item_id: Path, overwrite: bool = False) -> bool:
+    def save_item(self, data: str, item_id: Path, overwrite: bool = False, **kwargs) -> bool:
         """
         Save the provided data as an entire item with the given item identifier.
 
@@ -160,6 +181,7 @@ class FileSystemStorageClient(DataStorageClient[str, Path]):
             The path at which to save the given data.
         overwrite : bool
             Whether an existing item/file at this path should be overwritten (``False`` by default).
+        kwargs
 
         Returns
         -------
@@ -194,7 +216,7 @@ class StrAdaptorFileSystemClient(DataStorageClient[str, str]):
         else:
             self._base_client: FileSystemStorageClient = base_client
 
-    def delete_item(self, item_id: str) -> bool:
+    def delete_item(self, item_id: str, **kwargs) -> bool:
         """
         Delete the item with the given item identifier.
 
@@ -202,26 +224,37 @@ class StrAdaptorFileSystemClient(DataStorageClient[str, str]):
         ----------
         item_id : str
             The path (as a string) to the item to delete.
+        kwargs
+
+        Keyword Args
+        -------
+        missing_ok : bool
+            Optional param that, when set to ``True``, makes the function return ``True`` if the item to delete does not
+            initially exist (effectively ``False`` if not provided).
 
         Returns
         -------
         bool
             Whether the delete was successful.
         """
-        return self._base_client.delete_item(item_id=Path(item_id))
+        return self._base_client.delete_item(item_id=Path(item_id), **kwargs)
 
-    def list_items(self) -> List[str]:
+    def list_items(self, **kwargs) -> List[str]:
         """
         List the available, existing items under this instance's base directory.
+
+        Parameters
+        ----------
+        kwargs
 
         Returns
         -------
         List[str]
             A list of item identifiers for all existingitems under this instance's base directory.
         """
-        return [str(i) for i in self._base_client.list_items()]
+        return [str(i) for i in self._base_client.list_items(**kwargs)]
 
-    def read_item(self, item_id: str) -> str:
+    def read_item(self, item_id: str, **kwargs) -> str:
         """
         Read and return the data item.
 
@@ -229,15 +262,16 @@ class StrAdaptorFileSystemClient(DataStorageClient[str, str]):
         ----------
         item_id : str
             The path to the item, represented as a ``str``.
+        kwargs
 
         Returns
         -------
         str
             The data contained within the data item, as a str.
         """
-        return self._base_client.read_item(item_id=Path(item_id))
+        return self._base_client.read_item(item_id=Path(item_id), **kwargs)
 
-    def save_item(self, data: str, item_id: str, overwrite: bool = False) -> bool:
+    def save_item(self, data: str, item_id: str, overwrite: bool = False, **kwargs) -> bool:
         """
         Save the provided data as an entire item with the given item identifier.
 
@@ -249,13 +283,14 @@ class StrAdaptorFileSystemClient(DataStorageClient[str, str]):
             The identifier for the item to save, which implies a storage location.
         overwrite : bool
             Whether an existing item with the given identifier should be overwritten (``False`` by default).
+        kwargs
 
         Returns
         -------
         bool
             Whether saving the item was successful.
         """
-        return self._base_client.save_item(data=data, item_id=Path(item_id), overwrite=overwrite)
+        return self._base_client.save_item(data=data, item_id=Path(item_id), overwrite=overwrite, **kwargs)
 
 
 # TODO: implement MinIOStorageClient
