@@ -35,6 +35,24 @@ class DataStorageClient(Generic[DATA, ITEM_ID], ABC):
         pass
 
     @abstractmethod
+    def list_containers(self, **kwargs) -> List[str]:
+        """
+        List the names of all container entities that hold data items.
+
+        A "container" will vary depending on implementation.  It may be a top-level base directory, a database table,
+        an object store bucket, etc.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+        List[str]
+        """
+        pass
+
+    @abstractmethod
     def list_items(self, **kwargs) -> List[ITEM_ID]:
         """
         List the available, existing items this client can access.
@@ -137,6 +155,22 @@ class FileSystemStorageClient(DataStorageClient[str, Path]):
         else:
             return False
 
+    def list_containers(self, **kwargs) -> List[str]:
+        """
+        List the names of all container entities that hold data items.
+
+        For this type, there is only one "container" : the top-level base directory.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+        List[str]
+        """
+        return [str(self._base_dir)]
+
     def list_items(self, **kwargs) -> List[Path]:
         """
         List the available, existing files under this instance's base directory.
@@ -238,6 +272,22 @@ class StrAdaptorFileSystemClient(DataStorageClient[str, str]):
             Whether the delete was successful.
         """
         return self._base_client.delete_item(item_id=Path(item_id), **kwargs)
+
+    def list_containers(self, **kwargs) -> List[str]:
+        """
+        List the names of all container entities that hold data items.
+
+        For this type, there is only one "container" : the top-level base directory.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+        List[str]
+        """
+        return self._base_client.list_containers(**kwargs)
 
     def list_items(self, **kwargs) -> List[str]:
         """
