@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Generic, List, Optional, TypeVar
+from dataclasses import dataclass
+from typing_extensions import Self
 
 DATA = TypeVar("DATA")
 ITEM_ID = TypeVar("ITEM_ID")
@@ -357,4 +359,18 @@ class StrAdaptorFileSystemClient(DataStorageClient[str, str]):
         return self._base_client.save_item(data=data, item_id=Path(item_id), overwrite=overwrite, **kwargs)
 
 
-# TODO: implement MinIOStorageClient
+@dataclass(frozen=True)
+class ObjectStoreItemId:
+    """
+    Simple type to encapsulate the item identifier for data clients backed by an object store.
+    """
+
+    @classmethod
+    def from_str(cls, str_val: str) -> Self:
+        return cls(*str_val.split(':'))
+
+    bucket_name: str
+    object_name: str
+
+    def __str__(self) -> str:
+        return f"{self.bucket_name}:{self.object_name}"
