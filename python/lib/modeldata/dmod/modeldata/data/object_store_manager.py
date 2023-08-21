@@ -3,6 +3,9 @@ import json
 
 import minio.retention
 
+from .storage_client import DataStorageClient, ObjectStoreItemId
+
+from dmod.core.exception import DmodRuntimeError
 from dmod.core.meta_data import DataCategory, DataDomain
 from dmod.core.dataset import Dataset, DatasetManager, DatasetType, InitialDataAdder
 from datetime import datetime, timedelta
@@ -12,6 +15,158 @@ from minio.deleteobjects import DeleteObject
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 from uuid import UUID
+
+
+class MinIOStorageClient(DataStorageClient[bytes, ObjectStoreItemId]):
+
+    def __init__(self, obj_store_host_str: str, access_key: str, secret_key: str, is_secure: bool, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._api_client = Minio(endpoint=obj_store_host_str, access_key=access_key, secret_key=secret_key,
+                                 secure=is_secure)
+
+    def _check_exists(self, item_id: ObjectStoreItemId) -> Tuple[bool, bool]:
+        """
+        Private helper method to test if the item described by the given identifier exists.
+
+        Function first tests if the bucket in the identifier exists.  If it does, it then tests whether the bucket
+        contains the given object.  It then returns a tuple of the two results, with ``False`` for both elements if the
+        bucket doesn't exist.
+
+        Parameters
+        ----------
+        item_id : ObjectStoreItemId
+            The identifier for the item of interest.
+
+        Returns
+        -------
+        Tuple[bool, bool]
+            A tuple of whether the item's bucket exists and whether the item itself exists within that bucket.
+        """
+        if item_id.bucket_name not in self.list_containers():
+            return False, False
+        else:
+            try:
+                self._api_client.stat_object(item_id.bucket_name, item_id.object_name)
+                return True, True
+            # TODO: try to find more specific execption to catch
+            except Exception:
+                return True, False
+
+    def delete_item(self, item_id: ObjectStoreItemId, **kwargs) -> bool:
+        try:
+            self._api_client.remove_object(bucket_name=item_id.bucket_name, object_name=item_id.object_name)
+            return True
+        except Exception:
+            return False
+
+    def list_containers(self, **kwargs) -> List[str]:
+        """
+        Return the names of the available "containers" - i.e., buckets - for this client.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+        List[str]
+            The names of the available buckets.
+        """
+        return [bucket.name for bucket in self._api_client.list_buckets()]
+
+    def list_items(self, **kwargs) -> List[ObjectStoreItemId]:
+        """
+        List available data items.
+
+        This particular implementation supports the optional keyword args "buckets" or "containers" to provide an
+        iterable of the specific buckets to check.  Note that there is no sanity checking of the validity of the bucket
+        names prior to attempting to retrieving the list of items for each supplied bucket name.
+
+        Parameters
+        ----------
+        kwargs
+
+        Keyword Args
+        ----------
+        buckets
+            An iterable of the specific bucket names to get lists of items from.
+        containers
+            An alias for ``buckets``.
+
+        Returns
+        -------
+        List[ObjectStoreItemId]
+            List available data items.
+        """
+        item_ids = []
+        buckets = kwargs.get("buckets", kwargs.get("containers", self.list_containers()))
+        for bucket_name in buckets:
+            for item in self._api_client.list_objects(bucket_name):
+                item_ids.append(ObjectStoreItemId(bucket_name, item.object_name))
+        return item_ids
+
+    def read_item(self, item_id: ObjectStoreItemId, **kwargs) -> bytes:
+        """
+        Read and return data from the given item.
+
+        Parameters
+        ----------
+        item_id : ObjectStoreItemId
+            The identifier for the item of interest, including the bucket and object names.
+        kwargs
+            Any custom keyword args to be passed to the underlying API client.
+
+        Returns
+        -------
+        bytes
+            Data from the given item.
+        """
+        bucket_exists, object_exists = self._check_exists(item_id)
+
+        if not bucket_exists:
+            raise DmodRuntimeError(f"{self.__class__.__name__} can't read item {str(item_id)} with invalid bucket")
+        elif not object_exists:
+            raise DmodRuntimeError(f"{self.__class__.__name__} can't read non-existing item {str(item_id)}")
+
+        reply = self._api_client.get_object(bucket_name=item_id.bucket_name, object_name=item_id.object_name, **kwargs)
+        return reply.data
+
+    def save_item(self, data: bytes, item_id: ObjectStoreItemId, overwrite: bool = False, **kwargs) -> bool:
+        """
+
+        Parameters
+        ----------
+        data
+        item_id
+        overwrite
+        kwargs
+
+        Keyword Args
+        -------
+        is_temp : bool
+            Optional indicator of whether the item should be temporary.
+
+        Returns
+        -------
+
+        """
+        bucket_exists, object_exists = self._check_exists(item_id)
+
+        if not bucket_exists:
+            return False
+        elif object_exists and not overwrite:
+            raise DmodRuntimeError(f"{self.__class__.__name__} can't read non-existing item {str(item_id)}")
+
+        if kwargs.get("is_temp", False):
+            retention = minio.retention.Retention(mode=minio.retention.GOVERNANCE,
+                                                  retain_until_date=datetime.now() + timedelta(hours=1))
+        else:
+            retention = None
+
+        result = self._api_client.put_object(bucket_name=item_id.bucket_name, data=io.BytesIO(data), length=len(data),
+                                             object_name=item_id.object_name, retention=retention)
+        # TODO: do something more intelligent than this for determining success
+        return result.bucket_name == item_id.bucket_name
 
 
 class ObjectStoreDatasetManager(DatasetManager):
