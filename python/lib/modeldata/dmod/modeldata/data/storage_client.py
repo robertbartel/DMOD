@@ -144,6 +144,9 @@ class FileSystemStorageClient(DataStorageClient[str, Path]):
         bool
             Whether the delete was successful.
         """
+        # Do this to make sure we are working with something within our base directory
+        item_id.relative_to(self._base_dir)
+
         if not item_id.exists():
             return kwargs.get("missing_ok", False)
         elif item_id.is_file():
@@ -201,6 +204,8 @@ class FileSystemStorageClient(DataStorageClient[str, Path]):
         str
             The data contained within the data item, as a str.
         """
+        # Do this to make sure we are working with something within our base directory
+        item_id.relative_to(self._base_dir)
         return item_id.read_text()
 
     def save_item(self, data: str, item_id: Path, overwrite: bool = False, **kwargs) -> bool:
@@ -222,7 +227,16 @@ class FileSystemStorageClient(DataStorageClient[str, Path]):
         bool
             Whether saving the item was successful.
         """
-        return item_id.write_text(data) == len(data)
+        # Do this to make sure we are working with something within our base directory
+        item_id.relative_to(self._base_dir)
+        # Return failure if this path is actually an existing directory or should not be overwritten
+        if item_id.exists() and (not item_id.is_dir() or not overwrite):
+            return False
+        try:
+            item_id.parent.mkdir(parents=True, exist_ok=True)
+            return item_id.write_text(data) == len(data)
+        except Exception:
+            return False
 
 
 class StrAdaptorFileSystemClient(DataStorageClient[str, str]):
