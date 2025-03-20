@@ -51,7 +51,7 @@ done
 declare -x JOB_OUTPUT_WRITE_DIR="/tmp/job_output"
 
 # Get some universally applicable functions and constants
-source ./funcs.sh
+source /dmod/bin/funcs.sh
 init_script_mpi_vars
 
 if [ "$(whoami)" != "${MPI_USER:?MPI user not defined}" ]; then
