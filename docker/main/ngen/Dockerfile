@@ -782,35 +782,6 @@ ENV PATH=${WORKDIR}:${WORKDIR}/bin:/dmod/bin:$PATH
 
 ################################################################################################################
 ################################################################################################################
-##### A build stage for testing using the ngen-build-test image
-FROM rocky-ngen-deps as rocky_ngen_build_testing
-#FROM rocky_build_ngen as rocky_ngen_build_testing
-#FROM ${DOCKER_INTERNAL_REGISTRY}/ngen-deps:latest as rocky_ngen_build_testing
-
-COPY --chown=${USER} --from=rocky_init_repo ${WORKDIR}/ngen ${WORKDIR}/ngen
-
-ENV BOOST_ROOT=${WORKDIR}/boost
-
-USER root
-RUN if [ "${NGEN_WITH_PYTHON}" == "ON" ]; then \
-        chgrp -R ${USER} /usr/local/lib*/python3.* ; \
-        chmod -R g+sw /usr/local/lib*/python3.* ; \
-    fi
-USER ${USER}
-
-ENV VIRTUAL_ENV=/dmod/venv
-RUN if [ "${NGEN_WITH_PYTHON}" == "ON" ]; then python3 -m venv ${VIRTUAL_ENV} ; fi
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-RUN if [ "${NGEN_WITH_PYTHON}" == "ON" ]; then pip install numpy ; fi
-
-RUN cd ${BOOST_ROOT} && tar -xf boost_tarball.blob --strip 1 && rm boost_tarball.blob
-ENV BOOST_ROOT=${WORKDIR}/boost
-#COPY --chown=${USER} --from=rocky_build_troute ${WORKDIR}/t-route/wheels /tmp/t-route-wheels
-#COPY --chown=${USER} --from=rocky_build_troute ${WORKDIR}/t-route/requirements.txt /tmp/t-route-requirements.txt
-WORKDIR ${WORKDIR}/ngen
-
-################################################################################################################
-################################################################################################################
 ##### A build stage for the partitioner utility image
 FROM rocky-ngen-deps as partitioner_image
 
@@ -879,13 +850,14 @@ ENTRYPOINT ["entrypoint.sh"]
 ################################################################################################################
 ################################################################################################################
 ##### User customization build stage
-FROM rocky-ngen-deps as build_customizations
+FROM rocky_build_ngen as build_customizations
 
 ARG WORKDIR
 ARG NGEN_BUILD_CONFIG_TYPE
 ENV NGEN_BUILD_CONFIG_TYPE=${NGEN_BUILD_CONFIG_TYPE}
 
 COPY --chown=${USER} --from=pre_build_bmi_iso_c_fortran_dep ${WORKDIR}/iso_c_fortran_bmi ${WORKDIR}/iso_c_fortran_bmi
+#COPY --from=rocky_build_ngen /dmod/venv /dmod/venv
 
 ENV PATH=${WORKDIR}:${WORKDIR}/bin:/dmod/bin:${PATH}:/usr/lib64/mpich/bin
 ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/lib:/usr/local/lib64:/dmod/shared_libs
@@ -894,7 +866,9 @@ ENV VIRTUAL_ENV=/dmod/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Copy customization script and any other included artifacts (plus README, to make sure something is always there)
-COPY customize/* ${WORKDIR}
+COPY --chown=${USER} customize/* ${WORKDIR}
+
+USER root
 
 # Install packages from a requirements.txt if present
 RUN if [ -e ${WORKDIR}/requirements.txt ]; then pip3 install -r ${WORKDIR}/requirements.txt ; fi
@@ -910,13 +884,46 @@ RUN if [ -e ${WORKDIR}/cmake_repositories.txt ]; then \
 # If the user script exists and was copied, execute it
 RUN if [ -e ${WORKDIR}/customize.sh ]; then chmod ugo+x ${WORKDIR}/customize.sh && ${WORKDIR}/customize.sh ; fi
 
+USER ${USER}
+
+################################################################################################################
+################################################################################################################
+##### A build stage for testing using the ngen-build-test image
+FROM build_customizations as rocky_ngen_build_testing
+#FROM rocky-ngen-deps as rocky_ngen_build_testing
+#FROM rocky_build_ngen as rocky_ngen_build_testing
+#FROM ${DOCKER_INTERNAL_REGISTRY}/ngen-deps:latest as rocky_ngen_build_testing
+
+COPY --chown=${USER} --from=rocky_init_repo ${WORKDIR}/ngen ${WORKDIR}/ngen
+
+ENV BOOST_ROOT=${WORKDIR}/boost
+
+USER root
+RUN if [ "${NGEN_WITH_PYTHON}" == "ON" ]; then \
+        chgrp -R ${USER} /usr/local/lib*/python3.* ; \
+        chmod -R g+sw /usr/local/lib*/python3.* ; \
+    fi
+USER ${USER}
+
+ENV VIRTUAL_ENV=/dmod/venv
+# Don't need this if build_customizations is getting the built /dmod/venv from rocky_build_ngen
+#RUN if [ "${NGEN_WITH_PYTHON}" == "ON" ]; then python3 -m venv ${VIRTUAL_ENV} ; fi
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+RUN if [ "${NGEN_WITH_PYTHON}" == "ON" ]; then pip install numpy ; fi
+
+RUN cd ${BOOST_ROOT} && tar -xf boost_tarball.blob --strip 1 && rm boost_tarball.blob
+ENV BOOST_ROOT=${WORKDIR}/boost
+#COPY --chown=${USER} --from=rocky_build_troute ${WORKDIR}/t-route/wheels /tmp/t-route-wheels
+#COPY --chown=${USER} --from=rocky_build_troute ${WORKDIR}/t-route/requirements.txt /tmp/t-route-requirements.txt
+WORKDIR ${WORKDIR}/ngen
+
 ################################################################################################################
 ################################################################################################################
 ##### Model exec ngen worker image build stage
 #FROM rocky_build_ngen AS ngen_worker
 FROM rocky-base AS ngen_worker
 
-COPY --from=rocky_build_ngen / /
+COPY --from=build_customizations / /
 
 ARG NGEN_BMI_ACTIVE_SUBMODULES
 ARG DATASET_DIRECTORIES
@@ -945,6 +952,11 @@ COPY --chown=${USER} --from=build_bmi_snow_17 /dmod/ /dmod/
 COPY --chown=${USER} --from=build_customizations /dmod/ /dmod/
 
 USER root
+COPY --from=build_customizations /usr/include/ /usr/include/
+COPY --from=build_customizations /usr/lib/ /usr/lib/
+COPY --from=build_customizations /usr/lib64/ /usr/lib64/
+
+
 # TODO: (later) consider something like this in the future (at least optionally) when downloading the mc client below:
 # ARG MINIO_CLIENT_RELEASE="RELEASE.2024-07-08T20-59-24Z"
 # ...
@@ -976,14 +988,15 @@ RUN OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]') \
 USER ${USER}
 
 COPY --chown=${USER} noah_owp_parameters /dmod/bmi_module_data/noah_owp/parameters/
-COPY --chown=${USER} ngen_entrypoint.sh ${WORKDIR}/entrypoint.sh
-COPY --chown=${USER} funcs.sh ${WORKDIR}
+COPY --chown=${USER} ngen_entrypoint.sh /dmod/bin/ngen_entrypoint.sh
+COPY --chown=${USER} funcs.sh /dmod/bin/
 COPY --chown=${USER} --chmod=744 py_funcs.py /dmod/bin/py_funcs
 
 ENV HYDRA_PROXY_RETRY_COUNT=5
 
-# Change permissions for entrypoint and make sure data volume mount and dataset symlink parent directories exists
-RUN chmod +x ${WORKDIR}/entrypoint.sh \
+# Change permissions for default entrypoint, make sure it's used if no entrypoint is present, and make sure data volume mount and dataset symlink parent directories exists
+RUN chmod +x /dmod/bin/ngen_entrypoint.sh \
+    && if [ ! -e /dmod/bin/entrypoint.sh ]; then ln -s /dmod/bin/ngen_entrypoint.sh /dmod/bin/entrypoint.sh ; fi \
     && for p in datasets local_volumes cluster_volumes; do for d in ${DATASET_DIRECTORIES}; do mkdir -p /dmod/${p}/${d}; done; done \
     && pushd /dmod/bin \
     # NOTE use of `ln -sf`. \
@@ -1004,11 +1017,16 @@ ARG NGEN_CAL_BRANCH
 ARG NGEN_CAL_COMMIT
 
 # Overwrite the ngen entrypoint script from the parent stage, which is already set up with ENTRYPOINT
-COPY --chown=${USER:?} ngen_cal_entrypoint.sh ${WORKDIR:?}/entrypoint.sh
+COPY --chown=${USER:?} ngen_cal_entrypoint.sh /dmod/bin/ngen_cal_entrypoint.sh
 
 USER root
 # Try NGEN_CAL_COMMIT, if not set or empty, use NGEN_CAL_BRANCH
 RUN pip install --no-cache-dir "git+https://github.com/noaa-owp/ngen-cal@${NGEN_CAL_COMMIT:-${NGEN_CAL_BRANCH}}#egg=ngen_cal&subdirectory=python/ngen_cal"
 
+# Give a way to provide a specific entrypoint, but use default if not provided 
+# (though remove a symlink to default ngen worker entrypoint if that's what is in place)
 USER ${USER}
-RUN chmod +x ${WORKDIR}/entrypoint.sh
+RUN chmod +x /dmod/bin/ngen_cal_entrypoint.sh \
+    && if [ "$(readlink /dmod/bin/entrypoint.sh)" == "/dmod/bin/ngen_entrypoint.sh" ]; then rm /dmod/bin/entrypoint.sh ; fi \
+    && if [ ! -e /dmod/bin/entrypoint.sh ]; then ln -s /dmod/bin/ngen_cal_entrypoint.sh /dmod/bin/entrypoint.sh ; fi
+
