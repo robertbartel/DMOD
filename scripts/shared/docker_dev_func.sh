@@ -2,6 +2,12 @@
 
 DOCKER_DESKTOP_OS_NAME="Docker Desktop"
 
+if $(which docker-compose > /dev/null 2>&1); then
+    DOCKER_COMPOSE_COMMAND="docker-compose"
+else
+    DOCKER_COMPOSE_COMMAND="docker compose"
+fi
+
 docker_dev_check_volume_exists()
 {
     # $1 is volume name
@@ -208,8 +214,8 @@ docker_dev_validate_compose_config()
         >&2 echo "Error: Docker Compose config ${1} does not exist"
         return 1
     fi
-    #if docker-compose -f "${1}" config > /dev/null 2>&1; then
-    if docker-compose -f "${1}" config > /dev/null; then
+    #if ${DOCKER_COMPOSE_COMMAND:?No docker compose command set} -f "${1}" config > /dev/null 2>&1; then
+    if ${DOCKER_COMPOSE_COMMAND:?No docker compose command set} -f "${1}" config > /dev/null; then
         return 0
     else
         >&2 echo "Error: file '${1}' is not a valid Docker Compose config"
@@ -221,18 +227,18 @@ docker_dev_build_stack_images()
 {
     # 1 - compose file
     # 2 - stack name
-    # @:3 - other optional args for docker-compose when it performs the build step
+    # @:3 - other optional args for ${DOCKER_COMPOSE_COMMAND} when it performs the build step
     if [ ! -e "${1:?}" ]; then
         >&2 echo "Error: cannot build ${2:?} stack images - compose file ${1} does not exist"
         return 1
     # This checks that the config is valid
-    elif docker-compose -f "${1}" config > /dev/null 2>&1; then
+    elif ${DOCKER_COMPOSE_COMMAND:?No docker compose command set} -f "${1}" config > /dev/null 2>&1; then
         echo "Building container images for stack ${2} from config ${1}"
-        docker-compose -f "${1}" build ${@:3}
+        ${DOCKER_COMPOSE_COMMAND} -f "${1}" build ${@:3}
         return $?
     else
         >&2 echo "Error: invalid stack config ${1}"
-        docker-compose -f "${1}" config
+        ${DOCKER_COMPOSE_COMMAND} -f "${1}" config
         return 1
     fi
 }
@@ -333,7 +339,7 @@ docker_dev_deploy_stack_from_compose_using_env()
         exit 1
     fi
     # Then, as before, make sure we have a valid compose config file, and if so, start the stack
-    if docker-compose -f "${1:?}" config > /dev/null 2>&1; then
+    if ${DOCKER_COMPOSE_COMMAND:?No docker compose command set} -f "${1:?}" config > /dev/null 2>&1; then
         docker deployx --compose-file "${1}" "${2}"
         return $?
     # If we don't have a good config, then, again, exit in error

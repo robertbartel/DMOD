@@ -123,7 +123,7 @@ Options:
         argument.
 
     --build-args <args_string>
-        Provide additional custom arguments to docker-compose
+        Provide additional custom arguments to ${DOCKER_COMPOSE_COMMAND:?No docker compose command set}
         command when building, passed as a single string arg to
         this script.
 
@@ -343,7 +343,7 @@ exec_requested_actions()
     if [ -n "${DO_PUSH_ACTION:-}" ]; then
         # TODO: do health check or something to make sure registry is available
         echo "Pushing ${STACK_NAME:?} images to internal registry"
-        docker-compose -f ${DOCKER_BUILD_CONFIG:?} push
+        ${DOCKER_COMPOSE_COMMAND:?No docker compose command set} -f ${DOCKER_BUILD_CONFIG:?} push
         bail_if_action_failed $? push
     fi
 
