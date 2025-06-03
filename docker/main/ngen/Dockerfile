@@ -84,7 +84,8 @@ ARG NGEN_WITH_BMI_C="ON"
 ARG NGEN_WITH_BMI_FORTRAN="ON"
 ARG NGEN_WITH_PYTHON="ON"
 ARG NGEN_WITH_NETCDF="ON"
-ARG NGEN_WITH_ROUTING="ON"
+# This one needs to be lowercase for some use in conditional build stages
+ARG NGEN_WITH_ROUTING="on"
 ARG NGEN_WITH_UDUNITS="ON"
 ARG NGEN_UDUNITS_QUIET="ON"
 ARG NGEN_WITH_SQLITE="ON"
@@ -305,6 +306,8 @@ RUN dnf update -y && dnf install -y ${ROCKY_NGEN_DEPS_REQUIRED} && dnf clean -y 
     && if [ "${NGEN_WITH_PYTHON}" == "ON" ]; then pip install --no-cache-dir numpy; fi
 USER ${USER}
 
+ENV FC=gfortran
+
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for building t-route in Rocky Linux environment
@@ -429,25 +432,6 @@ ENV CC=gcc
 # Get this for the times we need to install t-route
 COPY --from=rocky_init_troute_repo ${WORKDIR}/t-route/requirements.txt ${WORKDIR}/t-route-requirements.txt
 
-# Install troute and required Python packages, with some deps needing some special attention
-RUN if [ "${NGEN_WITH_ROUTING}" == "ON" ]; then \
-      # Get subset of requirements needed first (including version specifiers if present) because of netCDF4 handling \
-      cat ${WORKDIR}/t-route-requirements.txt | grep -i numpy >> first_reqs.txt ; \
-      cat ${WORKDIR}/t-route-requirements.txt | grep -i pandas | grep -v geo >> first_reqs.txt ; \
-      cat ${WORKDIR}/t-route-requirements.txt | grep -i pyyaml >> first_reqs.txt ; \
-      cat ${WORKDIR}/t-route-requirements.txt | grep -i cython >> first_reqs.txt ; \
-      cat ${WORKDIR}/t-route-requirements.txt | grep -i pyarrow >> first_reqs.txt ; \
-      pip3 install --no-cache-dir -r first_reqs.txt ; \
-      rm first_reqs.txt ; \
-      # Then install a few more things, including a particular blosc2 version and an adjusted build of tables \
-      pip3 install --no-cache-dir bmipy blosc2==${BLOSC2_VERSION:-2.0.0} build wheel packaging pyproj fiona geopandas ; \
-      env HDF5_DIR=/usr pip3 install --no-cache-dir --no-build-isolation tables ; \
-      env HDF5_DIR=/usr pip3 install --no-cache-dir netCDF4==1.6.3 ; \
-      # Then install remaining t-route requirements
-      pip3 install --no-cache-dir -r ${WORKDIR}/t-route-requirements.txt ; \
-    fi \
-    && rm ${WORKDIR}/t-route-requirements.txt
-
 USER ${USER}
 
 ################################################################################################################
@@ -493,27 +477,23 @@ ARG NGEN_WITH_ROUTING
 COPY --chown=${USER} --from=rocky_init_troute_repo ${WORKDIR}/t-route ${WORKDIR}/t-route
 
 #    && python(){ /usr/bin/python3 \$@; } && export -f python \
-RUN if [ "${NGEN_WITH_ROUTING}" == "ON" ]; then \
+RUN if [ "${NGEN_WITH_ROUTING}" == "on" ]; then \
       export FC=gfortran ; \
       export F90=gfortran ; \
       mkdir ${WORKDIR}/t-route/wheels \
       && cd ${WORKDIR}/t-route \
-      && ./compiler.sh \
-      && cd ${WORKDIR}/t-route/src/troute-network \
-      && python3 setup.py --use-cython bdist_wheel \
-      && cp dist/*.whl ${WORKDIR}/t-route/wheels/ \
-      && cd ${WORKDIR}/t-route/src/troute-routing \
-      && python3 setup.py --use-cython bdist_wheel \
-      && cp dist/*.whl ${WORKDIR}/t-route/wheels/ \
-      && cd ${WORKDIR}/t-route/src/troute-config \
-      # troute-config doesn't use setup.py ... use build to make the wheel \
-      #&& python3 setup.py --use-cython bdist_wheel \
-      && python3 -m build . \
-      && cp dist/*.whl ${WORKDIR}/t-route/wheels/ \
-      && cd ${WORKDIR}/t-route/src/troute-nwm \
-      # troute-nwm doesn't use setup.py ... use build to make the wheel; see https://github.com/NOAA-OWP/t-route/pull/784 \
-      && python3 -m build . \
-      && cp dist/*.whl ${WORKDIR}/t-route/wheels/ ; \
+      && pip install --no-cache-dir build wheel \
+      && sed -i 's/build_[a-z]*=/#&/' compiler.sh \
+      && ./compiler.sh no-e \
+      && pip install --no-cache-dir -r requirements.txt \
+      && pip install --config-setting='--build-option=--use-cython' src/troute-network/ \
+      && python -m build --wheel --config-setting='--build-option=--use-cython' src/troute-network/ \
+      && pip install --no-build-isolation --config-setting='--build-option=--use-cython' src/troute-routing/ \
+      && python -m build --wheel --no-isolation --config-setting='--build-option=--use-cython' src/troute-routing/ \
+      && pip install --no-cache-dir setuptools-scm \
+      && python -m build --wheel --no-isolation src/troute-config/ \
+      && python -m build --wheel --no-isolation src/troute-nwm/ \
+      && cp src/troute-*/dist/*.whl wheels/. ; \
     fi
 
 USER root
@@ -624,10 +604,24 @@ RUN git clone \
     # Clean-up a little more for Release builds \
     && if [ "${NGEN_BUILD_CONFIG_TYPE}" == "Release" ]; then cd ${WORKDIR} && rm -rf ${WORKDIR}/snow-17 ; fi
 
+
+################################################################################################################
+################################################################################################################
+##### Create 2 intermediate build stages for conditional control over whether routing stuff gets done
+FROM rocky-ngen-deps AS pre_ngen_build_routing_OFF
+COPY --chown=${USER} --from=rocky_init_repo ${WORKDIR}/ngen ${WORKDIR}/ngen
+################################################################################################################
+FROM rocky-ngen-deps AS pre_ngen_build_routing_ON
+COPY --chown=${USER} --from=rocky_init_repo ${WORKDIR}/ngen ${WORKDIR}/ngen
+COPY --chown=${USER} --from=rocky_build_troute ${WORKDIR}/t-route/wheels /tmp/t-route-wheels
+COPY --chown=${USER} --from=rocky_build_troute ${WORKDIR}/t-route/src/kernel /tmp/t-route-kernels
+COPY --chown=${USER} --from=rocky_build_troute ${WORKDIR}/t-route/requirements.txt /tmp/t-route-requirements.txt
+
+
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for building framework in Rocky Linux environment
-FROM rocky-ngen-deps as rocky_build_ngen
+FROM pre_ngen_build_routing_${NGEN_WITH_ROUTING} AS rocky_build_ngen
 
 ARG REPO_URL
 ARG BRANCH
@@ -656,10 +650,6 @@ ARG BUILD_TOPMODEL
 ARG BUILD_PET
 ARG BUILD_SLOTH
 
-COPY --chown=${USER} --from=rocky_init_repo ${WORKDIR}/ngen ${WORKDIR}/ngen
-COPY --chown=${USER} --from=rocky_build_troute ${WORKDIR}/t-route/wheels /tmp/t-route-wheels
-COPY --chown=${USER} --from=rocky_build_troute ${WORKDIR}/t-route/src/kernel /tmp/t-route-kernels
-COPY --chown=${USER} --from=rocky_build_troute ${WORKDIR}/t-route/requirements.txt /tmp/t-route-requirements.txt
 ENV BOOST_ROOT=${WORKDIR}/boost
 
 USER root
@@ -670,8 +660,8 @@ RUN if [ "${NGEN_WITH_PYTHON}" == "ON" ]; then \
 USER ${USER}
 
 ENV VIRTUAL_ENV=/dmod/venv
-RUN python3 -m venv $VIRTUAL_ENV && pip3 install numpy
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+RUN python3 -m venv $VIRTUAL_ENV && pip3 install numpy
 
 RUN cd ${BOOST_ROOT} \
     && tar -xf boost_tarball.blob --strip 1 \
@@ -688,8 +678,8 @@ RUN cd ${BOOST_ROOT} \
     && ./build_sub extern/test_bmi_cpp \
     &&  if [ "${NGEN_WITH_PYTHON}" == "ON" ]; then \
             pip3 install --no-cache-dir -r extern/test_bmi_py/requirements.txt; \
-            if [ "${NGEN_WITH_ROUTING}" == "ON" ] ; then \
-                pip3 install --no-cache-dir /tmp/t-route-wheels/*.whl ; \
+            if [ "${NGEN_WITH_ROUTING}" == "on" ] ; then \
+                pip3 install --no-cache-dir /tmp/t-route-wheels/*.whl netCDF4==1.6.3; \
             fi; \
         fi \
     && if [ "${BUILD_NGEN_SERIAL}" == "true" ]; then \
