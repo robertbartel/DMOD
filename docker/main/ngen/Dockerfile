@@ -16,6 +16,9 @@ ARG NGEN_BUILD_CONFIG_TYPE="Release"
 
 ARG DATASET_DIRECTORIES="config forcing hydrofabric observation output"
 
+# A suffix to indicate something special about this build, and perhaps differentiate it slightly (e.g., for QA)
+ARG IMAGE_BUILD_SUFFIX
+
 # Passing the ARG variables from compose via .env file will squash these defaults with empty strings
 # Seems like the work around is to replicate the default values in the build env, or to check for
 # empty and set to default as is shown commented out below.
@@ -44,6 +47,14 @@ ARG SAC_SMA_COMMIT
 ARG SNOW_17_REPO_URL="https://github.com/NOAA-OWP/snow17.git"
 ARG SNOW_17_BRANCH="master"
 ARG SNOW_17_COMMIT
+
+#ARG SFT_REPO_URL="https://github.com/NOAA-OWP/SoilFreezeThaw.git"
+#ARG SFT_BRANCH="master"
+#ARG SFT_COMMIT
+#
+#ARG SMP_REPO_URL="https://github.com/NOAA-OWP/SoilMoistureProfiles.git"
+#ARG SMP_BRANCH="main"
+#ARG SMP_COMMIT
 
 #### Default arguments for required dependencies needed during various build stages
 # The Rocky-Linux-based "base" stage, rocky-base
@@ -75,6 +86,12 @@ ARG HD5_VERSION=1.10.9
 # Work around Fortran MPI issue
 ARG FCFLAGS="-w -fallow-argument-mismatch -O2"
 ARG FFLAGS="-w -fallow-argument-mismatch -O2"
+
+# Used to set analogous CMake env vars for adding default compilation flags
+# But not for dependencies, like MPI, just ngen (and BMI modules)
+ARG NGEN_CFLAGS
+ARG NGEN_CXXFLAGS
+
 ARG MPICH_CONFIGURE_OPTIONS="--enable-shared"
 ARG MPICH_MAKE_OPTIONS
 
@@ -300,10 +317,19 @@ ENV PIP_CONSTRAINT=${WORKDIR}/constraints.txt
 # TODO: later, go back and change all pip3/python3 to just pip/python (but leave for now to limit scope)
 # Note that this includes numpy, which is needed for Python BMI support, regardless of BMI module
 USER root
-RUN dnf update -y && dnf install -y ${ROCKY_NGEN_DEPS_REQUIRED} && dnf clean -y all \
-    && ln -s $(which python3) $(which python3 | sed 's/python3/python/') \
-    && pip install --no-cache-dir pip wheel packaging \
-    && if [ "${NGEN_WITH_PYTHON}" == "ON" ]; then pip install --no-cache-dir numpy; fi
+RUN dnf update -y \
+    &&  if [[ "${NGEN_BUILD_CONFIG_TYPE:-}" == "Debug" ]] || [[ "${NGEN_BUILD_CONFIG_TYPE:-}" == "RelWithDebInfo" ]]; then \
+            dnf install -y ${ROCKY_NGEN_DEPS_REQUIRED} python3-debug; \
+            ln -s $(which python3-debug) $(which python3 | sed 's/python3/python/'); \
+        else \
+            dnf install -y ${ROCKY_NGEN_DEPS_REQUIRED}; \
+            ln -s $(which python3) $(which python3 | sed 's/python3/python/'); \
+        fi \
+    && dnf install -y ${ROCKY_NGEN_DEPS_REQUIRED} \
+    && dnf clean -y all \
+    #&& ln -s $(which python3) $(which python3 | sed 's/python3/python/') \
+    && pip3 install --no-cache-dir pip wheel packaging \
+    && if [ "${NGEN_WITH_PYTHON}" == "ON" ]; then pip3 install --no-cache-dir numpy; fi
 USER ${USER}
 
 ENV FC=gfortran
@@ -433,6 +459,12 @@ ENV CC=gcc
 COPY --from=rocky_init_troute_repo ${WORKDIR}/t-route/requirements.txt ${WORKDIR}/t-route-requirements.txt
 
 USER ${USER}
+
+# Set/pass provided C/C++ flags here for the rest of things
+ARG NGEN_CXXFLAGS
+ARG NGEN_CFLAGS
+ENV CXXFLAGS=${NGEN_CXXFLAGS}
+ENV CFLAGS=${NGEN_CFLAGS}
 
 ################################################################################################################
 ################################################################################################################
@@ -577,6 +609,65 @@ RUN mkdir ${WORKDIR}/sac-sma \
 
 ################################################################################################################
 ################################################################################################################
+##### Create intermediate Docker build stage for building SoilFreezeThaw
+FROM rocky-ngen-deps as build_bmi_sft
+
+ARG NGEN_BUILD_CONFIG_TYPE
+ARG SFT_REPO_URL
+ARG SFT_BRANCH
+ARG SFT_COMMIT
+
+RUN git clone \
+        --single-branch \
+        --branch ${SFT_BRANCH:?No SoilFreezeThaw branch set} \
+        ${SFT_REPO_URL:?No SoilFreezeThaw repo set} \
+        ${WORKDIR}/SoilFreezeThaw \
+    && cd ${WORKDIR}/SoilFreezeThaw \
+    && if [ "x$SFT_COMMIT" != "x" ]; then git checkout $SFT_COMMIT ; fi \
+    && cmake -B ./cmake_build \
+            -DCMAKE_BUILD_TYPE=${NGEN_BUILD_CONFIG_TYPE:?} \
+            -DNGEN=ON  \
+            -DCMAKE_INSTALL_PREFIX:PATH=/dmod \
+            -S . \
+    && cmake --build ./cmake_build \
+    && cmake --build ./cmake_build --target install \
+    && mkdir -p /dmod/shared_libs \
+    && cp -a /dmod/lib64/libsftbmi.so* /dmod/shared_libs/ \
+    # Clean-up a little more for Release builds \
+    && if [ "${NGEN_BUILD_CONFIG_TYPE}" == "Release" ]; then cd ${WORKDIR} && rm -rf ${WORKDIR}/SoilFreezeThaw ; fi
+
+
+################################################################################################################
+################################################################################################################
+##### Create intermediate Docker build stage for building SoilMoistureProfiles
+FROM rocky-ngen-deps as build_bmi_smp
+
+ARG NGEN_BUILD_CONFIG_TYPE
+ARG SMP_REPO_URL
+ARG SMP_BRANCH
+ARG SMP_COMMIT
+
+RUN git clone \
+        --single-branch \
+        --branch ${SMP_BRANCH:?No SoilMoistureProfiles branch set} \
+        ${SMP_REPO_URL:?No SoilMoistureProfiles repo set} \
+        ${WORKDIR}/SoilMoistureProfiles \
+    && cd ${WORKDIR}/SoilMoistureProfiles \
+    && if [ "x$SMP_COMMIT" != "x" ]; then git checkout $SMP_COMMIT ; fi \
+    && cmake -B ./cmake_build \
+            -DCMAKE_BUILD_TYPE=${NGEN_BUILD_CONFIG_TYPE:?} \
+            -DNGEN=ON  \
+            -DCMAKE_INSTALL_PREFIX:PATH=/dmod \
+            -S . \
+    && cmake --build ./cmake_build \
+    && cmake --build ./cmake_build --target install \
+    && mkdir -p /dmod/shared_libs \
+    && cp -a /dmod/lib64/libsmpbmi.so* /dmod/shared_libs/ \
+    # Clean-up a little more for Release builds \
+    && if [ "${NGEN_BUILD_CONFIG_TYPE}" == "Release" ]; then cd ${WORKDIR} && rm -rf ${WORKDIR}/SoilMoistureProfiles ; fi
+
+################################################################################################################
+################################################################################################################
 ##### Create intermediate Docker build stage for building SNOW_17
 FROM rocky-ngen-deps as build_bmi_snow_17
 
@@ -669,6 +760,7 @@ RUN cd ${BOOST_ROOT} \
     && cd ${WORKDIR}/ngen \
     &&  if [ -z "${COMMIT:-}" ]; then \
             if [ "${REFRESH_BEFORE_BUILD:-}" = "true" ] ; then  \
+                git fetch ; \
                 git pull --ff-only ; \
                 git submodule update --init --depth 1 test/googletest ; \
                 git submodule update --init --recursive --depth 1 ; \
@@ -909,6 +1001,68 @@ WORKDIR ${WORKDIR}/ngen
 
 ################################################################################################################
 ################################################################################################################
+##### Software QA/analysis dependencies build stage
+FROM build_customizations AS ngen_qa_deps
+
+# Note: *** DO NOT CREATE /dmod/datasets/output AT THIS STAGE !!! (make the user bind mount something in)
+# TODO: look at separating things out into individual images a little better, especially the debuginfo-install stuff
+USER root
+RUN dnf install -y valgrind cppcheck gdb zstd \
+    && dnf debuginfo-install -y \
+            bzip2-libs-1.0.8-10.el9_5.x86_64 expat-2.5.0-3.el9_5.3.x86_64 glibc-2.34-125.el9_5.8.x86_64 \
+            libffi-3.4.2-8.el9.x86_64 libgcc-11.5.0-5.el9_5.x86_64 libgfortran-11.5.0-5.el9_5.x86_64 \
+            libquadmath-11.5.0-5.el9_5.x86_64 libstdc++-11.5.0-5.el9_5.x86_64 libuuid-2.37.4-20.el9.x86_64 \
+            openssl-libs-3.2.2-6.el9_5.1.x86_64 python3-libs-3.9.21-1.el9_5.x86_64 sqlite-libs-3.34.1-7.el9_3.x86_64 \
+            udunits2-2.2.28-5.el9.x86_64 xz-libs-5.2.5-8.el9_0.x86_64 zlib-1.2.11-40.el9.x86_64 \
+    && dnf -y clean all \
+    && mkdir /dmod/datasets/config \
+    && mkdir /dmod/datasets/forcing \
+    && mkdir /dmod/datasets/hydrofabric \
+    && mkdir -p /dmod/datasets/hydrofabric/ex_geojson_hf_01 \
+    && cp -a /ngen/ngen/extern/t-route/test/input/geo/NWM_2.1_Sample_Datasets/Croton_NY_TEST1 /dmod/datasets/hydrofabric/ex_geojson_hf_01/Croton_NY_TEST1 \
+    && cp   /ngen/ngen/data/catchment_data.geojson \
+            /ngen/ngen/data/nexus_data.geojson \
+            /ngen/ngen/extern/t-route/test/input/next_gen/*.json  \
+            /dmod/datasets/hydrofabric/ex_geojson_hf_01/ \
+    && cp -a /ngen/ngen/data/forcing /dmod/datasets/forcing/test_forcing_01 \
+    && chown -R ${USER}:${USER} /dmod/datasets/
+USER ${USER}
+
+ARG NGEN_WITH_ROUTING
+ENV NGEN_WITH_ROUTING=${NGEN_WITH_ROUTING}
+
+# Copy QA files into place
+COPY --chown=${USER} qa /dmod/qa
+
+# For now just use a symlink that we'll set up below
+#COPY --chown=${USER} --from=rocky_build_ngen /ngen/ngen/data/bmi /dmod/qa/ngen_ex_bmi_cfgs
+
+# TODO: need to make sure noah-owp parameter files are copied into place, and that configs have that location updated properly
+
+RUN chmod u+x /dmod/qa/run_memcheck.sh \
+    && ln -s /ngen/ngen/data/bmi /dmod/qa/ngen_ex_bmi_cfgs
+
+################################################################################################################
+################################################################################################################
+##### Memcheck specific utility image build stage
+FROM ngen_qa_deps AS ngen_memcheck
+
+# For memcheck runs, put some valid-looking param files in place (certainly good enough for this)
+COPY --chown=${USER} noah_owp_parameters /dmod/bmi_module_data/noah_owp/parameters/
+
+ENTRYPOINT ["/dmod/qa/run_memcheck.sh"]
+
+################################################################################################################
+################################################################################################################
+##### General software QA/analysis image build stage
+FROM ngen_qa_deps AS ngen_qa
+
+# TODO: consider whether you should change this
+ENTRYPOINT ["/bin/bash"]
+
+
+################################################################################################################
+################################################################################################################
 ##### Model exec ngen worker image build stage
 #FROM rocky_build_ngen AS ngen_worker
 FROM rocky-base AS ngen_worker
@@ -1011,7 +1165,7 @@ COPY --chown=${USER:?} ngen_cal_entrypoint.sh /dmod/bin/ngen_cal_entrypoint.sh
 
 USER root
 # Try NGEN_CAL_COMMIT, if not set or empty, use NGEN_CAL_BRANCH
-RUN pip install --no-cache-dir "git+https://github.com/noaa-owp/ngen-cal@${NGEN_CAL_COMMIT:-${NGEN_CAL_BRANCH}}#egg=ngen_cal&subdirectory=python/ngen_cal"
+RUN pip3 install --no-cache-dir "git+https://github.com/noaa-owp/ngen-cal@${NGEN_CAL_COMMIT:-${NGEN_CAL_BRANCH}}#egg=ngen_cal&subdirectory=python/ngen_cal"
 
 # Give a way to provide a specific entrypoint, but use default if not provided 
 # (though remove a symlink to default ngen worker entrypoint if that's what is in place)
