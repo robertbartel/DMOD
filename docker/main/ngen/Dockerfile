@@ -48,13 +48,13 @@ ARG SNOW_17_REPO_URL="https://github.com/NOAA-OWP/snow17.git"
 ARG SNOW_17_BRANCH="master"
 ARG SNOW_17_COMMIT
 
-#ARG SFT_REPO_URL="https://github.com/NOAA-OWP/SoilFreezeThaw.git"
-#ARG SFT_BRANCH="master"
-#ARG SFT_COMMIT
-#
-#ARG SMP_REPO_URL="https://github.com/NOAA-OWP/SoilMoistureProfiles.git"
-#ARG SMP_BRANCH="main"
-#ARG SMP_COMMIT
+ARG SFT_REPO_URL="https://github.com/NOAA-OWP/SoilFreezeThaw.git"
+ARG SFT_BRANCH="master"
+ARG SFT_COMMIT
+
+ARG SMP_REPO_URL="https://github.com/NOAA-OWP/SoilMoistureProfiles.git"
+ARG SMP_BRANCH="main"
+ARG SMP_COMMIT
 
 #### Default arguments for required dependencies needed during various build stages
 # The Rocky-Linux-based "base" stage, rocky-base
@@ -117,7 +117,7 @@ ARG BUILD_PET="true"
 ARG BUILD_SLOTH="true"
 
 # BMI submodules (and fortran bindings) in ngen extern/ dir that should have shared libs copied to /dmod/shared_libs/
-ARG NGEN_BMI_ACTIVE_SUBMODULES="iso_c_fortran_bmi SoilFreezeThaw SoilMoistureProfiles noah-owp-modular topmodel cfe sloth evapotranspiration"
+ARG NGEN_BMI_ACTIVE_SUBMODULES="iso_c_fortran_bmi noah-owp-modular topmodel cfe sloth evapotranspiration"
 
 ################################################################################################################
 ################################################################################################################
@@ -939,6 +939,12 @@ ARG NGEN_BUILD_CONFIG_TYPE
 ENV NGEN_BUILD_CONFIG_TYPE=${NGEN_BUILD_CONFIG_TYPE}
 
 COPY --chown=${USER} --from=pre_build_bmi_iso_c_fortran_dep ${WORKDIR}/iso_c_fortran_bmi ${WORKDIR}/iso_c_fortran_bmi
+# Copy libs/data/etc. from various per-module stages
+COPY --chown=${USER} --from=build_bmi_sft /dmod/ /dmod/
+COPY --chown=${USER} --from=build_bmi_smp /dmod/ /dmod/
+COPY --chown=${USER} --from=build_bmi_lgar_c /dmod/ /dmod/
+COPY --chown=${USER} --from=build_bmi_sac_sma /dmod/ /dmod/
+COPY --chown=${USER} --from=build_bmi_snow_17 /dmod/ /dmod/
 #COPY --from=rocky_build_ngen /dmod/venv /dmod/venv
 
 ENV PATH=${WORKDIR}:${WORKDIR}/bin:/dmod/bin:${PATH}:/usr/lib64/mpich/bin
@@ -1088,6 +1094,8 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 #    && cd $WORKDIR && rm -rf ngen boost
 
 # Copy libs/data/etc. from various per-module stages
+COPY --chown=${USER} --from=build_bmi_sft /dmod/ /dmod/
+COPY --chown=${USER} --from=build_bmi_smp /dmod/ /dmod/
 COPY --chown=${USER} --from=build_bmi_lgar_c /dmod/ /dmod/
 COPY --chown=${USER} --from=build_bmi_sac_sma /dmod/ /dmod/
 COPY --chown=${USER} --from=build_bmi_snow_17 /dmod/ /dmod/
