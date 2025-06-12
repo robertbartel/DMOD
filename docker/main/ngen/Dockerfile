@@ -1060,6 +1060,27 @@ ENTRYPOINT ["/dmod/qa/run_memcheck.sh"]
 
 ################################################################################################################
 ################################################################################################################
+##### CppCheck specific utility image build stage
+FROM ngen_qa_deps AS ngen_cppcheck
+
+ARG WORKDIR
+ARG CHECK_SRC_DIR="/dmod/qa/c_cpp_sources"
+
+RUN mkdir ${CHECK_SRC_DIR} \
+    && cp -a /ngen/ngen ${CHECK_SRC_DIR} \
+    && cp -a /ngen/ngen/extern/cfe/cfe ${CHECK_SRC_DIR} \
+    && cp -a /ngen/ngen/extern/evapotranspiration/evapotranspiration ${CHECK_SRC_DIR} \
+    && cp -a /ngen/ngen/extern/topmodel/topmodel ${CHECK_SRC_DIR} \
+    && chmod u+x /dmod/qa/run_cppcheck.sh
+
+COPY --from=build_bmi_sft ${WORKDIR}/SoilFreezeThaw ${CHECK_SRC_DIR}/SoilFreezeThaw
+COPY --from=build_bmi_smp ${WORKDIR}/SoilMoistureProfiles ${CHECK_SRC_DIR}/SoilMoistureProfiles
+COPY --from=build_bmi_lgar_c ${WORKDIR}/lgar-c ${CHECK_SRC_DIR}/lgar-c
+
+ENTRYPOINT ["/dmod/qa/run_cppcheck.sh"]
+
+################################################################################################################
+################################################################################################################
 ##### General software QA/analysis image build stage
 FROM ngen_qa_deps AS ngen_qa
 
