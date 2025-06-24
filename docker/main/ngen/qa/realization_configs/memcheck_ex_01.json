@@ -32,7 +32,7 @@
                 "model_type_name": "bmi_fortran_noahowp",
                 "library_file": "/dmod/shared_libs/libsurfacebmi.so",
                 "forcing_file": "",
-                "init_config": "/dmod/qa/ngen_ex_bmi_cfgs/fortran/noah-owp-modular-init-{{id}}.namelist.input",
+                "init_config": "/dmod/datasets/config/example_bmi_cfg_for_hf_01/fortran/noah-owp/noah-owp-modular-init-{{id}}.namelist.input",
                 "allow_exceed_end_time": true,
                 "main_output_variable": "QINSUR",
                 "variables_names_map": {
@@ -54,7 +54,7 @@
                 "model_type_name": "bmi_c_cfe",
                 "library_file": "/dmod/shared_libs/libcfebmi.so",
                 "forcing_file": "",
-                "init_config": "/dmod/qa/ngen_ex_bmi_cfgs/c/cfe/{{id}}_bmi_config.ini",
+                "init_config": "/dmod/datasets/config/example_bmi_cfg_for_hf_01/c/cfe/{{id}}_bmi_config.ini",
                 "allow_exceed_end_time": true,
                 "main_output_variable": "Q_OUT",
                 "registration_function": "register_bmi_cfe",
@@ -86,8 +86,5 @@
     "start_time": "2015-12-01 00:00:00",
     "end_time": "2015-12-30 23:00:00",
     "output_interval": 3600
-  },
-  "routing": {
-    "t_route_config_file_with_path": "/dmod/qa/routing_configs/test_troute_config_01.yaml"
   }
 }
