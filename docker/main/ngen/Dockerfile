@@ -1018,7 +1018,7 @@ FROM build_customizations AS ngen_qa_deps
 # Note: *** DO NOT CREATE /dmod/datasets/output AT THIS STAGE !!! (make the user bind mount something in)
 # TODO: look at separating things out into individual images a little better, especially the debuginfo-install stuff
 USER root
-RUN dnf install -y valgrind cppcheck gdb zstd \
+RUN dnf install -y diffutils valgrind cppcheck gdb gdb-gdbserver zstd \
     && dnf debuginfo-install -y \
             bzip2-libs-1.0.8-10.el9_5.x86_64 expat-2.5.0-3.el9_5.3.x86_64 glibc-2.34-125.el9_5.8.x86_64 \
             libffi-3.4.2-8.el9.x86_64 libgcc-11.5.0-5.el9_5.x86_64 libgfortran-11.5.0-5.el9_5.x86_64 \
@@ -1042,16 +1042,71 @@ USER ${USER}
 ARG NGEN_WITH_ROUTING
 ENV NGEN_WITH_ROUTING=${NGEN_WITH_ROUTING}
 
+ENV EX_BMI_DATASET_HF_01=example_bmi_cfg_for_hf_01
+ENV EX_BMI_DATASET_HF_01_PATH=/dmod/datasets/config/${EX_BMI_DATASET_HF_01}
+
 # Copy QA files into place
 COPY --chown=${USER} qa /dmod/qa
 
-# For now just use a symlink that we'll set up below
-#COPY --chown=${USER} --from=rocky_build_ngen /ngen/ngen/data/bmi /dmod/qa/ngen_ex_bmi_cfgs
+# Before setting up some example BMI configs (which depend on these), put some valid-looking Noah-OWP param files in place (certainly good enough for this)
+COPY --chown=${USER} noah_owp_parameters /dmod/bmi_module_data/noah_owp/parameters/
+
+# We'll manipulate the noah-owp configs, so create that whole directory structure now
+RUN mkdir -p ${EX_BMI_DATASET_HF_01_PATH}/fortran/noah-owp \
+    # For the C-based modules, we can just copy those example configs \
+    && cp -a /ngen/ngen/data/bmi/c ${EX_BMI_DATASET_HF_01_PATH}/. \
+    # Fix the param path for the Noah-OWP files \
+    && pushd /ngen/ngen/data/bmi/fortran \
+    &&  for f in $(ls *cat*); do \
+            cat ${f} | sed 's|extern/noah-owp-modular/noah-owp-modular/parameters/|/dmod/bmi_module_data/noah_owp/parameters/|' > ${EX_BMI_DATASET_HF_01_PATH}/fortran/noah-owp/${f} ; \
+        done \
+    && popd \
+    && mkdir -p /dmod/datasets/config/example_bmi_cfg_for_hf_01/fortran/sac_sma \
+    && mkdir -p /dmod/datasets/config/example_bmi_cfg_for_hf_01/fortran/snow17 \
+    &&  for c in cat-27 cat-52 cat-67; do \
+            python /dmod/qa/bmi_configs/gen_naive_sacsma_bmi.py --output-dir /dmod/datasets/config/example_bmi_cfg_for_hf_01/fortran/sac_sma ${c} ; \
+            python /dmod/qa/bmi_configs/gen_naive_snow17_bmi.py --output-dir /dmod/datasets/config/example_bmi_cfg_for_hf_01/fortran/snow17 ${c} ; \
+        done
+
+# Add a second example hydrofabric, its forcings, and its BMI configs
+RUN mkdir /dmod/datasets/hydrofabric/ex_gpkg_hf_02_gauge_01073000 \
+    && cp /ngen/ngen/data/gauge_01073000/gauge_01073000.gpkg /dmod/datasets/hydrofabric/ex_gpkg_hf_02_gauge_01073000/. \
+    && mkdir /dmod/datasets/forcing/ex_hf_02_forcing_netcdf \
+    && cp /ngen/ngen/data/gauge_01073000/forcing.nc /dmod/datasets/forcing/ex_hf_02_forcing_netcdf/. \
+    && cp -a /ngen/ngen/data/gauge_01073000/forcing /dmod/datasets/forcing/ex_hf_02_forcing_csv \
+    && mkdir -p /dmod/datasets/config/example_bmi_cfg_for_hf_02/c \
+    && mkdir -p /dmod/datasets/config/example_bmi_cfg_for_hf_02/fortran/noah-owp \
+    && cp -a /ngen/ngen/data/gauge_01073000/PET /dmod/datasets/config/example_bmi_cfg_for_hf_02/c/pet \
+    && cp -a /ngen/ngen/data/gauge_01073000/CFE /dmod/datasets/config/example_bmi_cfg_for_hf_02/c/cfe \
+    && pushd /ngen/ngen/data/gauge_01073000/NOAH/ \
+    &&  for f in $(ls *cat*); do \
+            cat ${f} \
+                | sed 's|./data/gauge_01073000/NOAH/parameters//|/dmod/bmi_module_data/noah_owp/parameters/|' \
+                | sed 's|startdate          = "200710010000"|startdate          = "201512010000"|' \
+                | sed 's|enddate            = "201912310000"|enddate            = "201512302300"|' \
+                > /dmod/datasets/config/example_bmi_cfg_for_hf_02/fortran/noah-owp/${f} ; \
+        done \
+    && popd \
+    && mkdir -p /dmod/datasets/config/example_bmi_cfg_for_hf_02/fortran/sac_sma \
+    && mkdir -p /dmod/datasets/config/example_bmi_cfg_for_hf_02/fortran/snow17 \
+    &&  for c in cat-11223 cat-11224 cat-11371 cat-11410 cat-11509; do \
+            python /dmod/qa/bmi_configs/gen_naive_sacsma_bmi.py \
+                --output-dir /dmod/datasets/config/example_bmi_cfg_for_hf_02/fortran/sac_sma \
+                --forcing-dir /dmod/datasets/forcing/ex_hf_02_forcing_netcdf \
+                --forcing-filename forcing.nc \
+                ${c} ; \
+            python /dmod/qa/bmi_configs/gen_naive_snow17_bmi.py \
+                --output-dir /dmod/datasets/config/example_bmi_cfg_for_hf_02/fortran/snow17 \
+                --forcing-dir /dmod/datasets/forcing/ex_hf_02_forcing_netcdf \
+                --forcing-filename forcing.nc \
+                ${c} ; \
+        done
+
+RUN chmod u+x /dmod/qa/run_memcheck.sh
 
 # TODO: need to make sure noah-owp parameter files are copied into place, and that configs have that location updated properly
 
-RUN chmod u+x /dmod/qa/run_memcheck.sh \
-    && ln -s /ngen/ngen/data/bmi /dmod/qa/ngen_ex_bmi_cfgs
+
 
 ################################################################################################################
 ################################################################################################################
