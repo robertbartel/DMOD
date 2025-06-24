@@ -1,0 +1,26 @@
+&SNOW17_CONTROL
+! === run control file for snow17bmi v. 1.x ===
+
+! -- basin config and path information
+main_id             = "$cat_id"     ! basin label or gage id
+n_hrus              = 1            ! number of sub-areas in model
+forcing_root        = "$forcing_root"
+output_root         = "/dmod/datasets/output"
+snow17_param_file   = "$param_file"
+output_hrus         = 0            ! output HRU results? (1=yes; 0=no)
+
+! -- run period information
+start_datehr          = $start_datehr  ! start date time, backward looking (check)
+end_datehr            = $end_datehr  ! end date time
+model_timestep        = 3600       ! in seconds (86400 seconds = 1 day)
+
+! -- state start/write flags and files
+warm_start_run      = 0	 ! is this run started from a state file?  (no=0 yes=1)
+write_states        = 0  ! write restart/state files for 'warm_start' runs (no=0 yes=1)
+
+! -- filenames only needed if warm_start_run = 1
+snow_state_in_root  = "data/state/snow17_states."  ! input state filename root
+
+! -- filenames only needed if write_states = 1
+snow_state_out_root = "data/state/snow17_states."  ! output states filename root
+/
