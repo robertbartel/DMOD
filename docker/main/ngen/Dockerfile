@@ -532,17 +532,6 @@ USER root
 RUN rm /usr/bin/python
 USER ${USER}
 
-################################################################################################################
-################################################################################################################
-##### Create intermediate Docker build stage for building ISO_C_BINDINGS for Fortran BMI modules
-FROM rocky-ngen-deps as pre_build_bmi_iso_c_fortran_dep
-
-ARG NGEN_BUILD_CONFIG_TYPE
-
-COPY --chown=${USER} --from=rocky_init_repo ${WORKDIR}/ngen/extern/iso_c_fortran_bmi ${WORKDIR}/iso_c_fortran_bmi
-WORKDIR ${WORKDIR}
-RUN cmake -B ./iso_c_fortran_bmi/cmake_build -DCMAKE_BUILD_TYPE=${NGEN_BUILD_CONFIG_TYPE:?} -S ./iso_c_fortran_bmi \
-    && cmake --build ./iso_c_fortran_bmi/cmake_build
 
 ################################################################################################################
 ################################################################################################################
@@ -576,36 +565,6 @@ RUN git clone \
     # Clean-up a little more for Release builds \
     && if [ "${NGEN_BUILD_CONFIG_TYPE}" == "Release" ]; then cd ${WORKDIR} && rm -rf ${WORKDIR}/lgar-c ; fi
 
-################################################################################################################
-################################################################################################################
-##### Create intermediate Docker build stage for building Sac-SMA
-FROM rocky-ngen-deps as build_bmi_sac_sma
-
-ARG NGEN_BUILD_CONFIG_TYPE
-ARG SAC_SMA_REPO_URL
-ARG SAC_SMA_BRANCH
-ARG SAC_SMA_COMMIT
-
-COPY --chown=${USER} --from=pre_build_bmi_iso_c_fortran_dep ${WORKDIR}/iso_c_fortran_bmi ${WORKDIR}/iso_c_fortran_bmi
-
-# Note the second layer in the directory structure (i.e., sac-sma/sac-sma is the actual repo dir)
-# Doing this to align with repo instructions
-RUN mkdir ${WORKDIR}/sac-sma \
-    && git clone \
-        --single-branch \
-        --branch ${SAC_SMA_BRANCH:?No sac-sma branch set} \
-        ${SAC_SMA_REPO_URL:?No sac-sma repo set} \
-        ${WORKDIR}/sac-sma/sac-sma \
-    && cd ${WORKDIR}/sac-sma \
-    && if [ "x$SAC_SMA_COMMIT" != "x" ]; then cd ./sac-sma && git checkout $SAC_SMA_COMMIT && cd .. ; fi \
-    && cp ./sac-sma/ngen_files/sacbmi.pc.in ./sac-sma/ngen_files/CMakeLists.txt . \
-    && cmake -B ./cmake_build -DCMAKE_BUILD_TYPE=${NGEN_BUILD_CONFIG_TYPE:?} -DCMAKE_INSTALL_PREFIX:PATH=/dmod -S . \
-    && cmake --build ./cmake_build --target all \
-    && mkdir -p /dmod/shared_libs \
-    && cp -a ./cmake_build/*.so* /dmod/lib64/. \
-    && cp -a ./cmake_build/*.so* /dmod/shared_libs/. \
-    # Clean-up a little more for Release builds \
-    && if [ "${NGEN_BUILD_CONFIG_TYPE}" == "Release" ]; then cd ${WORKDIR} && rm -rf ${WORKDIR}/sac-sma ; fi
 
 ################################################################################################################
 ################################################################################################################
@@ -665,6 +624,52 @@ RUN git clone \
     && cp -a /dmod/lib64/libsmpbmi.so* /dmod/shared_libs/ \
     # Clean-up a little more for Release builds \
     && if [ "${NGEN_BUILD_CONFIG_TYPE}" == "Release" ]; then cd ${WORKDIR} && rm -rf ${WORKDIR}/SoilMoistureProfiles ; fi
+
+
+################################################################################################################
+################################################################################################################
+##### Create intermediate Docker build stage for building ISO_C_BINDINGS for Fortran BMI modules
+FROM rocky-ngen-deps as pre_build_bmi_iso_c_fortran_dep
+
+ARG NGEN_BUILD_CONFIG_TYPE
+
+COPY --chown=${USER} --from=rocky_init_repo ${WORKDIR}/ngen/extern/iso_c_fortran_bmi ${WORKDIR}/iso_c_fortran_bmi
+WORKDIR ${WORKDIR}
+RUN cmake -B ./iso_c_fortran_bmi/cmake_build -DCMAKE_BUILD_TYPE=${NGEN_BUILD_CONFIG_TYPE:?} -S ./iso_c_fortran_bmi \
+    && cmake --build ./iso_c_fortran_bmi/cmake_build
+
+
+################################################################################################################
+################################################################################################################
+##### Create intermediate Docker build stage for building Sac-SMA
+FROM rocky-ngen-deps as build_bmi_sac_sma
+
+ARG NGEN_BUILD_CONFIG_TYPE
+ARG SAC_SMA_REPO_URL
+ARG SAC_SMA_BRANCH
+ARG SAC_SMA_COMMIT
+
+COPY --chown=${USER} --from=pre_build_bmi_iso_c_fortran_dep ${WORKDIR}/iso_c_fortran_bmi ${WORKDIR}/iso_c_fortran_bmi
+
+# Note the second layer in the directory structure (i.e., sac-sma/sac-sma is the actual repo dir)
+# Doing this to align with repo instructions
+RUN mkdir ${WORKDIR}/sac-sma \
+    && git clone \
+        --single-branch \
+        --branch ${SAC_SMA_BRANCH:?No sac-sma branch set} \
+        ${SAC_SMA_REPO_URL:?No sac-sma repo set} \
+        ${WORKDIR}/sac-sma/sac-sma \
+    && cd ${WORKDIR}/sac-sma \
+    && if [ "x$SAC_SMA_COMMIT" != "x" ]; then cd ./sac-sma && git checkout $SAC_SMA_COMMIT && cd .. ; fi \
+    && cp ./sac-sma/ngen_files/sacbmi.pc.in ./sac-sma/ngen_files/CMakeLists.txt . \
+    && cmake -B ./cmake_build -DCMAKE_BUILD_TYPE=${NGEN_BUILD_CONFIG_TYPE:?} -DCMAKE_INSTALL_PREFIX:PATH=/dmod -S . \
+    && cmake --build ./cmake_build --target all \
+    && mkdir -p /dmod/shared_libs \
+    && cp -a ./cmake_build/*.so* /dmod/lib64/. \
+    && cp -a ./cmake_build/*.so* /dmod/shared_libs/. \
+    # Clean-up a little more for Release builds \
+    && if [ "${NGEN_BUILD_CONFIG_TYPE}" == "Release" ]; then cd ${WORKDIR} && rm -rf ${WORKDIR}/sac-sma ; fi
+
 
 ################################################################################################################
 ################################################################################################################
