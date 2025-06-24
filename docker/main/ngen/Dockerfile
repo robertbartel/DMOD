@@ -1144,6 +1144,11 @@ ENTRYPOINT ["/dmod/qa/run_cppcheck.sh"]
 ##### General software QA/analysis image build stage
 FROM ngen_qa_deps AS ngen_qa
 
+USER root
+RUN dnf -y debuginfo-install expat-2.5.0-3.el9_5.3.x86_64 glibc-2.34-125.el9_5.8.x86_64 python3-libs-3.9.21-1.el9_5.x86_64 \
+    && dnf -y clean all
+USER ${USER}
+
 # TODO: consider whether you should change this
 ENTRYPOINT ["/bin/bash"]
 
