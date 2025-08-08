@@ -13,12 +13,24 @@ import numbers
 import re
 import random
 import string
+import importlib
 
 from collections import OrderedDict
 from datetime import timedelta
+from types import ModuleType
+
+
+def attempt_import(mod: str, fail_message: typing.Optional[str] = None) -> ModuleType:
+    try:
+        return importlib.import_module(mod)
+    except ImportError as e:
+        if fail_message is None:
+            fail_message = f"Failed to import {mod!r}; package may be missing."
+        raise ImportError(fail_message) from e
+
 
 try:
-    import numpy
+    attempt_import("numpy")
 except ImportError:
     numpy = None
 
