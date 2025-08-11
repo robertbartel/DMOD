@@ -16,9 +16,9 @@ class SacSmaInitConfig(SimpleSerializable):
 
     Note that this type is designed to model (in a software design sense) a Sac-SMA config.  It contains the required
     state variables - be they module execution settings or scientific modeling parameters - to represent the
-    configuration.  Importantly, it's design is (for the most part) separated from how such a config is represented,
-    including how the way the config is written to files on disk that are used by the module.  That is a concern for
-    serialization, which is handled by dedicated ::class:`Serializer` and ::class:`Deserializer` classes.
+    configuration.  Importantly, it's design is (for the most part) detached from various possible usages of such a
+    config, including how the way the config is written to files on disk that are used by the module.  That is a concern
+    for serialization, which is handled by dedicated ::class:`Serializer` and ::class:`Deserializer` classes.
 
     Attributes
     ----------
@@ -30,10 +30,10 @@ class SacSmaInitConfig(SimpleSerializable):
         Path to output data root, when ``output_hrus`` is ``True``; otherwise ``None``.
     output_hrus: bool
         Whether Sac-SMA module should output HRU results.
-    start: datetime
-        A start date and time for the simulation.
-    end: datetime
-        An end date and time for the simulation.
+    start_datehr: datetime
+        A start date and time for the simulation, though with precision down to the hour.
+    end_datehr: datetime
+        An end date and time for the simulation, though with precision down to the hour.
     model_timestep: int
         The timestep size for the module to use, in seconds.
     state_in_root: Optional[Path]
@@ -87,8 +87,8 @@ class SacSmaInitConfig(SimpleSerializable):
 
     forcing_root: Path
     output_root: Optional[Path]
-    start: datetime
-    end: datetime
+    start_datehr: datetime
+    end_datehr: datetime
     state_in_root: Optional[Path]
     state_out_root: Optional[Path]
 
@@ -120,19 +120,6 @@ class SacSmaInitConfig(SimpleSerializable):
         return SacSmaFileFormatDeserializer()
 
     @property
-    def end_datehr(self) -> datetime:
-        """
-        Alias for ::attribute:`end`, the end date and time of the simulation.
-
-        Note that this type will likely only have values with precision down to the hour.
-
-        Returns
-        -------
-        The end date and time of the simulation.
-        """
-        return self.end
-
-    @property
     def hru_id(self) -> str:
         """ Alias for catchment_id, used in certain contexts. """
         return self.catchment_id
@@ -160,19 +147,6 @@ class SacSmaInitConfig(SimpleSerializable):
 
     def get_default_validator_instance(self) -> Validator[Self]:
         return SacSmaSimpleValidator()
-
-    @property
-    def start_datehr(self) -> datetime:
-        """
-        Alias for ::attribute:`start`, the start date and time of the simulation.
-
-        Note that this type will likely only have values with precision down to the hour.
-
-        Returns
-        -------
-        The start date and time of the simulation.
-        """
-        return self.start
 
 
 class SacSmaSimpleValidator(Validator[SacSmaInitConfig]):
@@ -223,8 +197,8 @@ class SacSmaSimpleValidator(Validator[SacSmaInitConfig]):
             'catchment_id': str,
             'catchment_area': float,
             'forcing_root': Path,
-            'start': datetime,
-            'end': datetime,
+            'start_datehr': datetime,
+            'end_datehr': datetime,
             'model_timestep': int,
             'output_hrus': bool,
             'warm_start_run': bool,
@@ -406,8 +380,8 @@ class SacSmaFileFormatDeserializer(Deserializer[SacSmaInitConfig, SERIALIZABLE_A
                 forcing_root=Path(controls["forcing_root"]),
                 output_root=parse_optional_path(controls["output_root"]),
                 output_hrus=bool(controls["output_hrus"]),
-                start=datetime.strptime(str(controls["start_datehr"]), SacSmaFileFormatSerializer.SERIAL_DATETIME_PATTERN),
-                end=datetime.strptime(str(controls["end_datehr"]), SacSmaFileFormatSerializer.SERIAL_DATETIME_PATTERN),
+                start_datehr=datetime.strptime(str(controls["start_datehr"]), SacSmaFileFormatSerializer.SERIAL_DATETIME_PATTERN),
+                end_datehr=datetime.strptime(str(controls["end_datehr"]), SacSmaFileFormatSerializer.SERIAL_DATETIME_PATTERN),
                 model_timestep=int(controls["model_timestep"]),
                 warm_start_run=bool(controls["warm_start_run"]),
                 write_states=bool(controls["write_states"]),
