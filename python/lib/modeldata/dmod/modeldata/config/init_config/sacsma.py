@@ -1,16 +1,16 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from datetime import datetime
 from types import NoneType
 from typing import Optional, Self, Tuple
 
 from dmod.core.serializable_v2 import (Deserializer, SERIALIZABLE_AS_DICT, Serializer, SimpleSerializable,
-                                       Validator, from_ini_str, from_namelist_str, from_param_txt_str, to_ini_str,
-                                       to_namelist_str, to_param_txt_str)
+                                       Validator, Validated, Interval, IntervalStringSerializer, from_namelist_str,
+                                       from_param_txt_str, to_namelist_str, to_param_txt_str)
 
 
 @dataclass
-class SacSmaInitConfig(SimpleSerializable):
+class SacSmaInitConfig(SimpleSerializable, Validated):
     """
     Representation of BMI init config for Sac-SMA.
 
@@ -24,6 +24,8 @@ class SacSmaInitConfig(SimpleSerializable):
     ----------
     catchment_id: str
         ID of catchment/hru (synonymous with ``main_id`` and ``hru_id``).
+    catchment_area: float
+        Area of catchment/hru (synonymous with ``hru_area``).
     forcing_root: Path
         Path to forcing data root (which is really going to be a forcing file in this usage).
     output_root: Optional[Path]
@@ -44,8 +46,6 @@ class SacSmaInitConfig(SimpleSerializable):
         Whether to start from a warm start file.
     write_states: bool
         Whether to write restart files for subsequent "warm start" runs.
-    catchment_area: float
-        Area of catchment/hru (synonymous with ``hru_area``).
     uztwm: float
         Max upper zone tension water [mm]
     uzfwm: float
@@ -193,33 +193,6 @@ class SacSmaSimpleValidator(Validator[SacSmaInitConfig]):
         TypeError
             If any attribute value is not of the expected type.
         """
-        expected_types = {
-            'catchment_id': str,
-            'catchment_area': float,
-            'forcing_root': Path,
-            'start_datehr': datetime,
-            'end_datehr': datetime,
-            'model_timestep': int,
-            'output_hrus': bool,
-            'warm_start_run': bool,
-            'write_states': bool,
-            'uztwm': float,
-            'uzfwm': float,
-            'lztwm': float,
-            'lzfpm': float,
-            'lzfsm': float,
-            'adimp': float,
-            'uzk': float,
-            'lzpk': float,
-            'lzsk': float,
-            'zperc': float,
-            'rexp': float,
-            'pctim': float,
-            'pfree': float,
-            'riva': float,
-            'side': float,
-            'rserv': float,
-        }
 
         # Moving these out of the "regular" order; they depend on checking a value that needs to be typed correctly
         variable_expected_types = {
@@ -227,6 +200,9 @@ class SacSmaSimpleValidator(Validator[SacSmaInitConfig]):
             'state_in_root': Path if obj.warm_start_run else NoneType,
             'state_out_root': Path if obj.write_states else NoneType,
         }
+
+        # Get field types, but leave out fields we are handling specially based on another variable
+        expected_types = {f.name: f.type for f in fields(obj) if f.name not in variable_expected_types.keys()}
 
         for attr, attr_type in expected_types.items():
             val = getattr(obj, attr)
@@ -267,36 +243,42 @@ class SacSmaSimpleValidator(Validator[SacSmaInitConfig]):
             Raised if any of the attributes values are not valid.
         """
         if not obj.catchment_id:
-            raise ValueError(f"Sac-SMA init config requires a valid catchment ID but received {obj.catchment_id!s}.")
+            raise Validator.ValidationValueError(
+                f"{self.__class__.__name__} requires a valid catchment ID but received {obj.catchment_id!s}.")
         if obj.catchment_area <= 0:
-            raise ValueError(f"Sac-SMA init config requires a positive catchment area but received {obj.catchment_area!s}.")
-        
+            raise Validator.ValidationValueError(
+                f"{self.__class__.__name__} requires a positive catchment area but received {obj.catchment_area!s}.")
+        if obj.model_timestep <= 0:
+            raise Validator.ValidationValueError(
+                f"{self.__class__.__name__} requires a positive model timestep but received {obj.model_timestep!s}.")
+
         # Defer to this to organize and separate validation of path values if/when needed
         self.validate_path_values(obj)
-        attr_ranges = {
-            "uztwm": {"min": 25.0, "max": 125.0},
-            "uzfwm": {"min": 10.0, "max": 100.0},
-            "lztwm": {"min": 75.0, "max": 300.0},
-            "lzfpm": {"min": 40.0, "max": 600.0},
-            "lzfsm": {"min": 15.0, "max": 300.0},
-            "adimp": {"min": 0.0, "max": 0.2},
-            "uzk": {"min": 0.2, "max": 0.5},
-            "lzpk": {"min": 0.001, "max": 0.015},
-            "lzsk": {"min": 0.03, "max": 0.2},
-            "zperc": {"min": 20, "max": 300},
-            "rexp": {"min": 1.4, "max": 3.5},
-            "pctim": {"min": 0.0, "max": 0.05},
-            "pfree": {"min": 0.0, "max": 0.5},
-            "riva": {"min": 0.0, "max": 0.2},
-            "side": {"min": 0.0, "max": 0.2},
-            "rserv": {"min": 0.2, "max": 0.4}
+        attr_intervals = {
+            "uztwm": {"min_val": 25.0, "max_val": 125.0},
+            "uzfwm": {"min_val": 10.0, "max_val": 100.0},
+            "lztwm": {"min_val": 75.0, "max_val": 300.0},
+            "lzfpm": {"min_val": 40.0, "max_val": 600.0},
+            "lzfsm": {"min_val": 15.0, "max_val": 300.0},
+            "adimp": {"min_val": 0.0, "max_val": 0.2},
+            "uzk": {"min_val": 0.2, "max_val": 0.5},
+            "lzpk": {"min_val": 0.001, "max_val": 0.015},
+            "lzsk": {"min_val": 0.03, "max_val": 0.2},
+            "zperc": {"min_val": 20, "max_val": 300},
+            "rexp": {"min_val": 1.4, "max_val": 3.5},
+            "pctim": {"min_val": 0.0, "max_val": 0.05},
+            "pfree": {"min_val": 0.0, "max_val": 0.5},
+            "riva": {"min_val": 0.0, "max_val": 0.2},
+            "side": {"min_val": 0.0, "max_val": 0.2},
+            "rserv": {"min_val": 0.2, "max_val": 0.4}
         }
-        for attr, attr_range in attr_ranges.items():
+        for attr, attr_range in attr_intervals.items():
             val = getattr(obj, attr)
-            if val < attr_range["min"] or val > attr_range["max"]:
+            interval = Interval.get_default_deserializer_instance().deserialize(attr_intervals.get(attr))
+            if not interval.contains(val):
                 raise Validator.ValidationValueError(
-                    f"Sac-SMA init config requires attribute '{attr}' to be in range "
-                    f"[{attr_range['min']}, {attr_range['max']}] but received {val!s}."
+                    f"{self.__class__.__name__} requires attribute '{attr}' to be in range "
+                    f"{IntervalStringSerializer().serialize(interval)} but received '{val!s}'."
                 )
 
 
