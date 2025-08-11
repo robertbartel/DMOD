@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 from abc import ABC, abstractmethod
 from collections import OrderedDict
@@ -324,7 +325,6 @@ class Deserializer(Generic[T, O], ABC):
         pass
 
 
-
 class Validator(Generic[T], ABC):
     """
     Abstraction for type responsible for validating generically defined ::class:`T` objects.
@@ -442,24 +442,6 @@ class SimpleSerializable(ABC):
         """
         return serializer.serialize(self)
 
-    def accept_validator(self, validator: Validator[Self]):
-        """
-        Perform specialized validation of this instance using the provided validator.
-
-        Note that this calls both ::meth:`validate_types` and :meth:`validate_values` on the provided validator.
-
-        Parameters
-        ----------
-        validator
-            Object to perform validation on this instance.
-
-        Returns
-        -------
-        Whether the types and values of this instance are valid according to the provided validator.
-        """
-        validator.validate_types(self)
-        validator.validate_values(self)
-
     @abstractmethod
     def get_default_serializer_instance(self) -> Serializer[Self, SERIALIZABLE_AS_DICT]:
         """
@@ -470,27 +452,6 @@ class SimpleSerializable(ABC):
         An instance of the default serializer for this type.
         """
         pass
-
-    @abstractmethod
-    def get_default_validator_instance(self) -> Validator[Self]:
-        """
-        Get an instance of the default validator for this type.
-
-        Returns
-        -------
-        An instance of the default validator for this type.
-        """
-        pass
-
-    def run_default_validation(self):
-        """
-        Execute validation on this instance using its default validator.
-
-        See Also
-        --------
-        get_default_validator_instance
-        """
-        self.accept_validator(self.get_default_validator_instance())
 
     def to_dict(self) -> SERIALIZABLE_AS_DICT:
         """
@@ -523,3 +484,102 @@ class SimpleSerializable(ABC):
             the serialized JSON string representation of this instance
         """
         return json.dumps(self.to_dict(), sort_keys=sort_keys)
+
+
+class Validated(ABC):
+    """
+    Abstract type that can be validated, with default members for those operations.
+
+    Abstract type supporting validation, where this operation is performed by separate ::class:`Validator` objects.
+    These are accepted as visiting objects via the :meth:`accept_validator` method.
+
+    However, subtypes are aware of and can utilize default validator instances to perform a baseline validation
+    independently.
+    """
+
+    @abstractmethod
+    def get_default_validator_instance(self) -> Validator[Self]:
+        """
+        Get an instance of the default validator for this type.
+
+        Returns
+        -------
+        An instance of the default validator for this type.
+        """
+        pass
+
+    def accept_validator(self, validator: Validator[Self]):
+        """
+        Perform specialized validation of this instance using the provided validator.
+
+        Note that this calls both ::meth:`validate_types` and :meth:`validate_values` on the provided validator.
+
+        Parameters
+        ----------
+        validator
+            Object to perform validation on this instance.
+
+        Returns
+        -------
+        Whether the types and values of this instance are valid according to the provided validator.
+        """
+        validator.validate_types(self)
+        validator.validate_values(self)
+
+    def run_default_validation(self):
+        """
+        Execute validation on this instance using its default validator.
+
+        See Also
+        --------
+        get_default_validator_instance
+        """
+        self.accept_validator(self.get_default_validator_instance())
+
+
+# TODO: (later) this might belong somewhere else
+@dataclasses.dataclass
+class Interval(SimpleSerializable):
+    """ Helper class for defining a numeric interval and testing if a value is within it. """
+    min_val: Union[int, float]
+    max_val: Union[int, float]
+    min_is_open: bool = False
+    max_is_open: bool = False
+
+    def __post_init__(self):
+        if self.min_val == self.max_val:
+            raise ValueError(f"Can't create {self.__class__.__name__} using the two endpoints that are equal")
+        if self.min_val >= self.max_val:
+            raise ValueError(f"Can't create {self.__class__.__name__} with min endpoint '{self.min_val!s}' that is "
+                             f"greater than max endpoint '{self.max_val!s}'")
+
+    def contains(self, value: Union[int, float]) -> bool:
+        """ Test if the given value is contained by the interval. """
+        meets_min = value > self.min_val if self.min_is_open else value >= self.min_val
+        meets_max = value < self.max_val if self.max_is_open else value <= self.max_val
+        return meets_min and meets_max
+
+    @classmethod
+    def get_default_deserializer_instance(cls) -> Deserializer[Self, SERIALIZABLE_AS_DICT]:
+        return IntervalDictSerDes()
+
+    def get_default_serializer_instance(self) -> Serializer[Self, SERIALIZABLE_AS_DICT]:
+        return IntervalDictSerDes()
+
+
+class IntervalDictSerDes(Serializer[Interval, dict[str, Union[int, float]]],
+                         Deserializer[Interval, dict[str, Union[int, float]]]):
+    """ Serializer/Deserializer for Interval objects to dictionaries. """
+    def serialize(self, interval: Interval) -> dict[str, Union[int, float]]:
+        return dataclasses.asdict(interval)
+
+    def deserialize(self, serialized_interval: dict[str, Union[int, float]]) -> Interval:
+        return Interval(**serialized_interval)
+
+
+class IntervalStringSerializer(Serializer[Interval, str]):
+    """ Type encapsulating serializing an interval to a string using standard math notation."""
+    def serialize(self, interval: Interval) -> str:
+        begin = f"({interval.min_val}" if interval.min_is_open else f"[{interval.min_val}"
+        end = f"{interval.max_val})" if interval.max_is_open else f"{interval.max_val}]"
+        return f"{begin},{end}"
