@@ -1,11 +1,12 @@
 import unittest
+import dataclasses
 from datetime import datetime
 from typing import Dict, Tuple
 from pathlib import Path
 from . import find_git_root_dir
 from ..modeldata.config.init_config.sacsma import (SacSmaInitConfig, SacSmaFileFormatDeserializer,
                                                    SacSmaFilesDeserializer, SacSmaFileFormatSerializer,
-                                                   SacSmaFilesSerializer)
+                                                   SacSmaFilesSerializer, Validator)
 
 class SacSmaTestingExamples:
 
@@ -64,8 +65,8 @@ class SacSmaTestingExamples:
                                 forcing_root=Path("data/bmi/forcing/cat-27.csv"),
                                 output_root=None,
                                 output_hrus=False,
-                                start_datehr=self.example_start_dates[1],
-                                end_datehr=self.example_end_dates[1],
+                                start=self.example_start_dates[1],
+                                end=self.example_end_dates[1],
                                 model_timestep=3600,
                                 warm_start_run=False,
                                 write_states=False,
@@ -109,6 +110,31 @@ class TestSacSmaFileFormatDeserializer(unittest.TestCase):
         ex_dict = self.testing_examples.example_cfg_dicts[ex_idx]
         ex_cfg_obj = self.testing_examples.example_cfg_objects[ex_idx]
         self.assertEqual(ex_cfg_obj, self.deserializer.deserialize(ex_dict))
+
+    def test_deserialization_1_b(self):
+        """ Test that deserialization works as expected for example case 1, checking an individual param value. """
+        ex_idx = 1
+        ex_dict = self.testing_examples.example_cfg_dicts[ex_idx]
+        ex_cfg_obj = self.testing_examples.example_cfg_objects[ex_idx]
+
+        deserialized_obj = self.deserializer.deserialize(ex_dict)
+        self.assertEqual(ex_dict["params"]["uztwm"], deserialized_obj.uztwm)
+
+        self.assertEqual(ex_cfg_obj, self.deserializer.deserialize(ex_dict))
+
+    def test_deserialization_2_a(self):
+        """
+        Test that deserialization fails as expected if the object would be created with invalid values.
+
+        For example, if 20.0 for were the value of ``uztwm`` in the created object.  The valid range for ``uztwm`` is
+        25.0 to 125.0.
+        """
+        ex_idx = 1
+        base_dict = self.testing_examples.example_cfg_dicts[ex_idx]
+        base_dict["params"]["uztwm"] = 20.0
+
+        with self.assertRaises(Validator.ValidationValueError):
+            self.deserializer.deserialize(base_dict)
 
 
 class TestSacSmaFileFormatSerializer(unittest.TestCase):
@@ -238,3 +264,63 @@ class TestSacSmaInitConfig(unittest.TestCase):
         deserializer = SacSmaFilesDeserializer()
         deser_obj = deserializer.deserialize((namelist_file, params_file))
         self.assertEqual(ex_cfg_obj, deser_obj)
+
+    def test_validation_1_a(self):
+        """ Test that default validation works as expected for valid example case 1. """
+        ex_idx = 1
+        ex_cfg_obj = self.testing_examples.example_cfg_objects[ex_idx]
+        ex_cfg_obj.run_default_validation()
+
+    def test_validation_1_b(self):
+        """ Test default validation works as expected for valid example case 1 directly using ``accept_validator``. """
+        ex_idx = 1
+        ex_cfg_obj = self.testing_examples.example_cfg_objects[ex_idx]
+        ex_cfg_obj.accept_validator(ex_cfg_obj.get_default_validator_instance())
+
+    def test_validation_2_a(self):
+        """
+        Test that validation fails as expected for bad example with unexpected type for catchment id.
+        """
+        ex_idx = 1
+        base_cfg = self.testing_examples.example_cfg_objects[ex_idx]
+        invalid_cfg = SacSmaInitConfig(**dataclasses.asdict(base_cfg))
+        invalid_cfg.catchment_id = 12345
+        with self.assertRaises(Validator.ValidationTypeError):
+            invalid_cfg.run_default_validation()
+
+    def test_validation_2_b(self):
+        """
+        Test that validation fails as expected for bad example with unexpected type for ``warm_start_run``.
+        """
+        ex_idx = 1
+        base_cfg = self.testing_examples.example_cfg_objects[ex_idx]
+        invalid_cfg = SacSmaInitConfig(**dataclasses.asdict(base_cfg))
+        invalid_cfg.warm_start_run = 5
+        with self.assertRaises(Validator.ValidationTypeError):
+            invalid_cfg.run_default_validation()
+
+    def test_validation_2_c(self):
+        """
+        Test that validation fails as expected for bad example with too small a value (20.0) for ``uztwm``.
+
+        The valid range for ``uztwm`` is 25.0 to 125.0.
+        """
+        ex_idx = 1
+        base_cfg = self.testing_examples.example_cfg_objects[ex_idx]
+        invalid_cfg = SacSmaInitConfig(**dataclasses.asdict(base_cfg))
+        invalid_cfg.uztwm = 20.0
+        with self.assertRaises(Validator.ValidationValueError):
+            invalid_cfg.run_default_validation()
+
+    def test_validation_2_d(self):
+        """
+        Test that validation fails as expected for bad example with too large a value (120.0) for ``uzfwm``.
+
+        The valid range for ``uzfwm`` is 10.0 to 100.0.
+        """
+        ex_idx = 1
+        base_cfg = self.testing_examples.example_cfg_objects[ex_idx]
+        invalid_cfg = SacSmaInitConfig(**dataclasses.asdict(base_cfg))
+        invalid_cfg.uzfwm = 120.0
+        with self.assertRaises(Validator.ValidationValueError):
+            invalid_cfg.run_default_validation()

@@ -12,22 +12,28 @@ from dmod.core.serializable_v2 import (Deserializer, SERIALIZABLE_AS_DICT, Seria
 @dataclass
 class SacSmaInitConfig(SimpleSerializable):
     """
-    Representation of BMI init config for SAC-SMA.
+    Representation of BMI init config for Sac-SMA.
+
+    Note that this type is designed to model (in a software design sense) a Sac-SMA config.  It contains the required
+    state variables - be they module execution settings or scientific modeling parameters - to represent the
+    configuration.  Importantly, it's design is (for the most part) separated from how such a config is represented,
+    including how the way the config is written to files on disk that are used by the module.  That is a concern for
+    serialization, which is handled by dedicated ::class:`Serializer` and ::class:`Deserializer` classes.
 
     Attributes
     ----------
     catchment_id: str
-        ID of catchment/hru
+        ID of catchment/hru (synonymous with ``main_id`` and ``hru_id``).
     forcing_root: Path
         Path to forcing data root (which is really going to be a forcing file in this usage).
     output_root: Optional[Path]
         Path to output data root, when ``output_hrus`` is ``True``; otherwise ``None``.
     output_hrus: bool
         Whether Sac-SMA module should output HRU results.
-    start_datehr: datetime
-        A start date for the simulation, though with only hourly precision being important.
-    end_datehr: datetime
-        An end date for the simulation, though with only hourly precision being important.
+    start: datetime
+        A start date and time for the simulation.
+    end: datetime
+        An end date and time for the simulation.
     model_timestep: int
         The timestep size for the module to use, in seconds.
     state_in_root: Optional[Path]
@@ -39,7 +45,7 @@ class SacSmaInitConfig(SimpleSerializable):
     write_states: bool
         Whether to write restart files for subsequent "warm start" runs.
     catchment_area: float
-        Area of catchment/hru
+        Area of catchment/hru (synonymous with ``hru_area``).
     uztwm: float
         Max upper zone tension water [mm]
     uzfwm: float
@@ -81,8 +87,8 @@ class SacSmaInitConfig(SimpleSerializable):
 
     forcing_root: Path
     output_root: Optional[Path]
-    start_datehr: datetime
-    end_datehr: datetime
+    start: datetime
+    end: datetime
     state_in_root: Optional[Path]
     state_out_root: Optional[Path]
 
@@ -113,8 +119,18 @@ class SacSmaInitConfig(SimpleSerializable):
     def get_default_deserializer_instance(cls) -> Deserializer[Self, SERIALIZABLE_AS_DICT]:
         return SacSmaFileFormatDeserializer()
 
-    def get_default_serializer_instance(self) -> Serializer[Self, SERIALIZABLE_AS_DICT]:
-        return SacSmaFileFormatSerializer()
+    @property
+    def end_datehr(self) -> datetime:
+        """
+        Alias for ::attribute:`end`, the end date and time of the simulation.
+
+        Note that this type will likely only have values with precision down to the hour.
+
+        Returns
+        -------
+        The end date and time of the simulation.
+        """
+        return self.end
 
     @property
     def hru_id(self) -> str:
@@ -127,17 +143,36 @@ class SacSmaInitConfig(SimpleSerializable):
         return self.catchment_area
 
     @property
-    def main_id(self) -> str:
-        """ Alias for catchment_id, used in certain contexts. """
-        return self.catchment_id
-
-    @property
     def n_hrus(self) -> int:
         """
         Property of a Sac-SMA config representing the number of HRUs/catchments it applies to, though constrained to
         always be ``1`` for this implementation.
         """
         return 1
+
+    @property
+    def main_id(self) -> str:
+        """ Alias for catchment_id, used in certain contexts. """
+        return self.catchment_id
+
+    def get_default_serializer_instance(self) -> Serializer[Self, SERIALIZABLE_AS_DICT]:
+        return SacSmaFileFormatSerializer()
+
+    def get_default_validator_instance(self) -> Validator[Self]:
+        return SacSmaSimpleValidator()
+
+    @property
+    def start_datehr(self) -> datetime:
+        """
+        Alias for ::attribute:`start`, the start date and time of the simulation.
+
+        Note that this type will likely only have values with precision down to the hour.
+
+        Returns
+        -------
+        The start date and time of the simulation.
+        """
+        return self.start
 
 
 class SacSmaSimpleValidator(Validator[SacSmaInitConfig]):
@@ -188,8 +223,8 @@ class SacSmaSimpleValidator(Validator[SacSmaInitConfig]):
             'catchment_id': str,
             'catchment_area': float,
             'forcing_root': Path,
-            'start_datehr': datetime,
-            'end_datehr': datetime,
+            'start': datetime,
+            'end': datetime,
             'model_timestep': int,
             'output_hrus': bool,
             'warm_start_run': bool,
@@ -371,8 +406,8 @@ class SacSmaFileFormatDeserializer(Deserializer[SacSmaInitConfig, SERIALIZABLE_A
                 forcing_root=Path(controls["forcing_root"]),
                 output_root=parse_optional_path(controls["output_root"]),
                 output_hrus=bool(controls["output_hrus"]),
-                start_datehr=datetime.strptime(str(controls["start_datehr"]), SacSmaFileFormatSerializer.SERIAL_DATETIME_PATTERN),
-                end_datehr=datetime.strptime(str(controls["end_datehr"]), SacSmaFileFormatSerializer.SERIAL_DATETIME_PATTERN),
+                start=datetime.strptime(str(controls["start_datehr"]), SacSmaFileFormatSerializer.SERIAL_DATETIME_PATTERN),
+                end=datetime.strptime(str(controls["end_datehr"]), SacSmaFileFormatSerializer.SERIAL_DATETIME_PATTERN),
                 model_timestep=int(controls["model_timestep"]),
                 warm_start_run=bool(controls["warm_start_run"]),
                 write_states=bool(controls["write_states"]),
@@ -404,8 +439,8 @@ class SacSmaFileFormatDeserializer(Deserializer[SacSmaInitConfig, SERIALIZABLE_A
             self.__validator.validate_types(config)
             self.__validator.validate_values(config)
             return config
-        except ValueError as e:
-            raise ValueError(
+        except Validator.ValidationValueError as e:
+            raise Validator.ValidationValueError(
                 f"Unable to convert serialized dictionary to {config.__class__.__name__} due to validation errors"
             ) from e
 
