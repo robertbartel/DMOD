@@ -193,40 +193,33 @@ class SacSmaSimpleValidator(Validator[SacSmaInitConfig]):
         TypeError
             If any attribute value is not of the expected type.
         """
+        incorrect = ((f.name, f.type) for f in fields(obj) if not isinstance(getattr(obj, f.name), f.type))
+        attr, attr_type = next(iter(incorrect), (None, None))
+        if attr:
+            raise Validator.ValidationTypeError(
+                f"'{obj.__class__.__name__}' expected '{attr}' attribute to be of type {attr_type}, but was of "
+                f"type {type(getattr(obj, attr)).__name__} instead"
+            )
 
-        # Moving these out of the "regular" order; they depend on checking a value that needs to be typed correctly
-        variable_expected_types = {
+        # Also need more specific checking of these, as they depend on another value
+        var_expected_types = {
             'output_root': Path if obj.output_hrus else NoneType,
             'state_in_root': Path if obj.warm_start_run else NoneType,
             'state_out_root': Path if obj.write_states else NoneType,
         }
+        dependent_attr = {
+            'output_root': 'output_hrus',
+            'state_in_root': 'warm_start_run',
+            'state_out_root': 'write_states',
+        }
 
-        # Get field types, but leave out fields we are handling specially based on another variable
-        expected_types = {f.name: f.type for f in fields(obj) if f.name not in variable_expected_types.keys()}
-
-        for attr, attr_type in expected_types.items():
-            val = getattr(obj, attr)
-            if not isinstance(val, attr_type):
-                raise Validator.ValidationTypeError(
-                    f"'{obj.__class__.__name__}' expected '{attr}' attribute to be of type {attr_type}, but was of "
-                    f"type {type(val).__name__} instead"
-                )
-
-        for attr, attr_type in variable_expected_types.items():
-            val = getattr(obj, attr)
-            if attr == "output_root":
-                cond_attr = "output_hrus"
-            elif attr == "state_in_root":
-                cond_attr = "warm_start_run"
-            elif attr == "state_out_root":
-                cond_attr = "write_states"
-            else:
-                raise NotImplementedError(f"Unexpected conditionally validated attr {attr} in {obj.__class__.__name__}")
-            if not isinstance(val, attr_type):
-                raise Validator.ValidationTypeError(
-                    f"'{obj.__class__.__name__}' expected '{attr}' to be of type {attr_type} based on the value of "
-                    f"'{cond_attr}' attribute, but value was of type {type(val).__name__} instead"
-                )
+        incorrect = ((a, a_type) for a, a_type in var_expected_types.items() if not isinstance(getattr(obj, a), a_type))
+        attr, attr_type = next(iter(incorrect), (None, None))
+        if attr:
+            raise Validator.ValidationTypeError(
+                f"'{obj.__class__.__name__}' expected '{attr}' to be of type {attr_type} based on the value of "
+                f"'{dependent_attr[attr]}', but value was of type {type(getattr(obj, attr)).__name__} instead"
+            )
 
     def validate_values(self, obj: SacSmaInitConfig):
         """
@@ -311,6 +304,20 @@ class SacSmaFileFormatDeserializer(Deserializer[SacSmaInitConfig, SERIALIZABLE_A
     Note that this type does validate deserialized objects before returning them.
     """
 
+    @classmethod
+    def control_section_key(cls) -> str:
+        """
+        Get the key to use for the "controls" section of the serialized dictionary.
+
+        Get the key to use for the "controls" section of the serialized dictionary, as used in dictionary basis for
+        namelist files when serializing to file.
+
+        Returns
+        -------
+        Get the key to use for the "controls" section of the serialized dictionary.
+        """
+        return "SAC_CONTROL"
+
     def __init__(self, validator: Optional[Validator[SacSmaInitConfig]] = None ):
         """
         Initialize.
@@ -345,7 +352,7 @@ class SacSmaFileFormatDeserializer(Deserializer[SacSmaInitConfig, SERIALIZABLE_A
         try:
             params: SERIALIZABLE_AS_DICT = serialized_form["params"]
             # Since the only thing within 'controls' is "SAC_CONTROL", just use that directly
-            controls: SERIALIZABLE_AS_DICT = serialized_form["settings"]["SAC_CONTROL"]
+            controls: SERIALIZABLE_AS_DICT = serialized_form["settings"][self.control_section_key()]
 
             if params["hru_id"] != controls["main_id"]:
                 raise ValueError("Invalid Sac-SMA serialized init config: catchment id in params and namelist portions "
@@ -400,6 +407,7 @@ class SacSmaFileFormatDeserializer(Deserializer[SacSmaInitConfig, SERIALIZABLE_A
                 f"Unable to convert serialized dictionary to {config.__class__.__name__} due to validation errors"
             ) from e
 
+
 class SacSmaFileFormatSerializer(Serializer[SacSmaInitConfig, SERIALIZABLE_AS_DICT]):
     """
     Serializer of Sac-SMA init config objects that converts them to JSON dictionaries mirroring the arrangement of data
@@ -428,7 +436,7 @@ class SacSmaFileFormatSerializer(Serializer[SacSmaInitConfig, SERIALIZABLE_AS_DI
             return "" if path is None else str(path)
 
         settings = {
-            "SAC_CONTROL": {
+            SacSmaFileFormatDeserializer.control_section_key(): {
                 "main_id": serializable.main_id,
                 "n_hrus": serializable.n_hrus,
                 "forcing_root": str(serializable.forcing_root),
@@ -529,12 +537,15 @@ class SacSmaFilesDeserializer(Deserializer[SacSmaInitConfig, Tuple[Path, Path]])
         controls_dict = from_namelist_str(namelist_file.read_text())
         params_dict = from_param_txt_str(params_file.read_text())
 
-        # controls_dict top-level control section key needs to be moved to upper case for consistency with everywhere else
-        if "sac_control" in controls_dict:
-            controls_dict["SAC_CONTROL"] = controls_dict.pop("sac_control")
+        controls_section_key = SacSmaFileFormatDeserializer.control_section_key()
 
-        if "SAC_CONTROL" not in controls_dict:
-            raise KeyError(f"Invalid Sac-SMA namelist file: missing required top-level 'SAC_CONTROL'/'sac_control' key")
+        # controls_dict top-level control section key needs to be moved to upper case for consistency with everywhere else
+        if controls_section_key.lower() in controls_dict:
+            controls_dict[controls_section_key] = controls_dict.pop(controls_section_key.lower())
+
+        if controls_section_key not in controls_dict:
+            raise KeyError(f"Invalid Sac-SMA namelist file: missing required top-level '{controls_section_key}'/"
+                           f"'{controls_section_key.lower()}' key")
 
         # Everything inside of "params" will be a string; need to coerce to floats
         for key, val in params_dict.items():
@@ -548,7 +559,7 @@ class SacSmaFilesDeserializer(Deserializer[SacSmaInitConfig, Tuple[Path, Path]])
 
         # controls_dict will have sac_param_file, though this should be removed at this stage
         try:
-            config_params_file_str = controls_dict["SAC_CONTROL"].pop("sac_param_file")
+            config_params_file_str = controls_dict[controls_section_key].pop("sac_param_file")
         except KeyError as e:
             raise ValueError(f"Invalid Sac-SMA namelist file: missing required key '{e.args[0]}'") from e
         except IndexError as e:
@@ -589,7 +600,8 @@ class SacSmaFilesSerializer(Serializer[SacSmaInitConfig, Tuple[Path, Path]]):
         initial_serializer = SacSmaFileFormatSerializer()
         serial_dict = initial_serializer.serialize(serializable)
         # Inject the path for the params config into the namelist config details
-        serial_dict["settings"]["SAC_CONTROL"]["sac_param_file"] = str(self.__params_file_path)
+        control_section_key = SacSmaFileFormatDeserializer.control_section_key()
+        serial_dict["settings"][control_section_key]["sac_param_file"] = str(self.__params_file_path)
 
         namelist_str = to_namelist_str(serial_dict["settings"])
         params_str = to_param_txt_str(serial_dict["params"])
