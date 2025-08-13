@@ -547,14 +547,19 @@ class Interval(SimpleSerializable):
     max_is_open: bool = False
 
     def __post_init__(self):
-        if self.min_val == self.max_val:
-            raise ValueError(f"Can't create {self.__class__.__name__} using the two endpoints that are equal")
-        if self.min_val >= self.max_val:
+
+        if self.min_val == self.max_val and (self.min_is_open or self.max_is_open):
+            raise ValueError(f"Invalid to create {self.__class__.__name__} with the two equal endpoints "
+                             f"unless both endpoints are closed.")
+        if self.min_val > self.max_val:
             raise ValueError(f"Can't create {self.__class__.__name__} with min endpoint '{self.min_val!s}' that is "
                              f"greater than max endpoint '{self.max_val!s}'")
 
     def contains(self, value: Union[int, float]) -> bool:
         """ Test if the given value is contained by the interval. """
+        # Implication here, based on post_init validation, is that both endpoints are closed, so check the value
+        if self.min_val == self.max_val:
+            return value == self.min_val
         meets_min = value > self.min_val if self.min_is_open else value >= self.min_val
         meets_max = value < self.max_val if self.max_is_open else value <= self.max_val
         return meets_min and meets_max
