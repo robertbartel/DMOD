@@ -17,7 +17,13 @@ license = { text = "DOC" }
 requires-python = ">=3.8"
 
 [project.optional-dependencies]
+yaml = ["pyyaml"]
+namelist = ["f90nml"]
+toml = ["tomli", "tomli_w"]
+files = ["pyyaml", "f90nml", "tomli", "tomli_w"]
+dev = ["pyyaml", "f90nml", "tomli", "tomli_w", "pytest>=7.0.0"]
 test = ["pytest>=7.0.0"]
+
 
 [tool.setuptools.dynamic]
 version = { attr = "dmod.core._version.__version__" }
