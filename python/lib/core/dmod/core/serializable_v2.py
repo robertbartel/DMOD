@@ -28,9 +28,9 @@ SERIALIZABLE_AS_DICT: TypeAlias = Dict[
 A = TypeVar("A")
 """ Unbounded generic type variable for type that may be converted. """
 T = TypeVar("T", bound="SimpleSerializable")
-""" Bounded generic type variable for types that can be serialized. """
+""" Generic type variable bounded to ::class:`SimpleSerializable` for types that can be serialized. """
 O = TypeVar("O")
-""" Unbounded generic type variable for type that may be the result of convertion/serialization. """
+""" Unbounded generic type variable for type that may be the result of serialization, and thus may be deserialized. """
 
 
 def to_ini_str(serializable_as_dict: SERIALIZABLE_AS_DICT,
@@ -105,7 +105,6 @@ def to_namelist_str(serializable_as_dict: SERIALIZABLE_AS_DICT) -> str:
     -------
     The given dictionary transformed into a string suitable for writing to a namelist file.
     """
-    # TODO: might need to make f90nml an extras (or at least need in dependencies)
     f90nml = attempt_import("f90nml")
     # While dicts are ordered in recent python, f90nml requires an OrderedDict
     namelist = f90nml.Namelist(OrderedDict(serializable_as_dict))
@@ -113,7 +112,7 @@ def to_namelist_str(serializable_as_dict: SERIALIZABLE_AS_DICT) -> str:
     return str(namelist).rstrip()
 
 
-def from_namelist_str(namelist_str: str, comment_tokens: List[str] = []) -> SERIALIZABLE_AS_DICT:
+def from_namelist_str(namelist_str: str) -> SERIALIZABLE_AS_DICT:
     """
     Transform a namelist formatted string to a dictionary.
 
@@ -121,14 +120,11 @@ def from_namelist_str(namelist_str: str, comment_tokens: List[str] = []) -> SERI
     ----------
     namelist_str
         The namelist formated string to transform.
-    comment_tokens
-        List of tokens to set as comment tokens for the underlying f90nml parser (by default, an empty list).
 
     Returns
     -------
     Serialized dictionary representation of the namelist formatted string.
     """
-    # TODO: might need to make f90nml an extras (or at least need in dependencies)
     f90nml = attempt_import("f90nml")
     parser = f90nml.Parser()
     data: f90nml.Namelist = parser.reads(namelist_str)
@@ -149,7 +145,6 @@ def to_yaml_str(serializable_as_dict: SERIALIZABLE_AS_DICT) -> str:
     -------
     The given dictionary transformed into a string suitable for writing to a YAML file.
     """
-    # TODO: might need to make yaml/pyyaml an extras (or at least need in dependencies)
     yaml = attempt_import("yaml")
 
     # See https://github.com/yaml/pyyaml/issues/234 and https://github.com/yaml/pyyaml/issues/234#issuecomment-765894586
@@ -186,7 +181,6 @@ def to_toml_str(serializable_as_dict: SERIALIZABLE_AS_DICT) -> str:
     -------
     The given dictionary transformed into a string suitable for writing to a TOML file.
     """
-    # TODO: might need to make toml an extras (or at least need in dependencies)
     tomli_w = attempt_import("tomli_w")
     return tomli_w.dumps(serializable_as_dict).rstrip()
 
@@ -250,7 +244,6 @@ def from_param_txt_str(ini_str: str) -> SERIALIZABLE_AS_DICT:
     return dict(cp.items("_NO_SECTION"))
 
 
-
 class Serializer(Generic[T, O], ABC):
     """
     Abstract type to apply specialized serialization to ::class:`T` objects, transforming them into ::class:`O` objects.
@@ -290,17 +283,17 @@ class Serializer(Generic[T, O], ABC):
 
 class Deserializer(Generic[T, O], ABC):
     """
-    Abstract type to apply custom deserialization to ::class:`T` objects.
+    Abstract type to apply custom deserialization of ::class:`T` objects.
 
-    An abstraction to support decoupling of deserialization from the specific implementation of ::class:`T` when needed.
+    An abstraction to support decoupling of deserialization for the specific implementation of ::class:`T` when needed.
     While such types support their own serialization and deserialization, the specific format may not be appropriate
     or sufficient for all situations.  For example, a configuration object may be a unified concept but written to
     multiple files.  Such files could be represented by distinct objects, but doing so only because the underlying
     entity is saved this way unnecessarily couples the design for the object to the specific serialization format.
 
-    In the base definition, ::class:`O` is expected to be something that makes sense for serialization and
-    deserialization, like ``str`` or ::class:`Path` or JSON objects, but subtype implementations are free to determine
-    what that is.
+    In the base definition, ::class:`O` is expected to be something that makes sense for ::class:`T` objects to be
+    serialized to or deserialized from, like ``str`` or ::class:`Path` or JSON objects.  However, subtype
+    implementations are effectively unconstrained in determining what that is.
     """
 
     @abstractmethod
