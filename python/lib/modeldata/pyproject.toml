@@ -16,7 +16,7 @@ dependencies = [
     "geopandas",
     "ngen-config@git+https://github.com/noaa-owp/ngen-cal@master#egg=ngen-config&subdirectory=python/ngen_conf",
     "dmod.communication>=0.4.2",
-    "dmod.core>=0.23.0",
+    "dmod.core>=0.22.0",
     "minio",
     "aiohttp~=3.8",
     "shapely>=2.0.0",
@@ -33,6 +33,11 @@ license = { text = "DOC" }
 requires-python = ">=3.8"
 
 [project.optional-dependencies]
+yaml = ["pyyaml"]
+namelist = ["f90nml"]
+toml = ["tomli", "tomli_w"]
+allconfigs = ["pyyaml", "f90nml", "tomli", "tomli_w"]
+dev = ["pyyaml", "f90nml", "tomli", "tomli_w", "pytest>=7.0.0"]
 test = ["pytest>=7.0.0"]
 
 [tool.setuptools.dynamic]
