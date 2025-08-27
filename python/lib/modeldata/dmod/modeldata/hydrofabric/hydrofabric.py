@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from hypy import Catchment, HydroLocation, Nexus
 from pathlib import Path
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, FrozenSet, Generic, List, Optional, Set, Tuple, TypeVar, Union
 from ..subset import SubsetDefinition
 
 
@@ -32,10 +32,14 @@ class HydrofabricCatchment(Catchment, ABC):
         pass
 
 
-class Hydrofabric(ABC):
+C = TypeVar('C', bound=HydrofabricCatchment)
+N = TypeVar('N', bound=Nexus)
+
+
+class Hydrofabric(Generic[C, N], ABC):
 
     @classmethod
-    def connect_features(cls, catchment: Catchment, nexus: Nexus, is_catchment_upstream: bool):
+    def connect_features(cls, catchment: C, nexus: N, is_catchment_upstream: bool):
         """
         Make the connections on both sides between this catchment and nexus.
 
@@ -54,9 +58,9 @@ class Hydrofabric(ABC):
 
         Parameters
         ----------
-        catchment : Catchment
+        catchment : C
             The upstream/downstream catchment in the connected pair.
-        nexus : Nexus
+        nexus : N
             The upstream/downstream (with this being opposite the state of ``catchment``) nexus in the connected pair.
         is_catchment_upstream : bool
             Whether ``catchment`` is connected upstream of ``nexus``.
@@ -81,7 +85,7 @@ class Hydrofabric(ABC):
             catchment._inflow = nexus
 
     @classmethod
-    def get_ids_of_connected(cls, feature: Union[Catchment, Nexus], upstream: bool, downstream: bool) -> Set[str]:
+    def get_ids_of_connected(cls, feature: Union[C, N], upstream: bool, downstream: bool) -> Set[str]:
         """
         Get the ids of the features connected to the given feature.
 
@@ -91,7 +95,7 @@ class Hydrofabric(ABC):
 
         Parameters
         ----------
-        feature : Union[Catchment, Nexus]
+        feature : Union[C, N]
             The base catchment or nexus.
         upstream : bool
             Whether the base's upstream feature(s) should have their ids included.
@@ -191,7 +195,7 @@ class Hydrofabric(ABC):
         """
         links_reps = []
         for cat_id in self.get_all_catchment_ids():
-            catchment: Catchment = self.get_catchment_by_id(cat_id)
+            catchment: C = self.get_catchment_by_id(cat_id)
             # A catchment has, at most, one outflow/downstream nexus, so ...
             if catchment.outflow is not None:
                 links_reps.append("{}_{}".format(cat_id, catchment.outflow.id))
@@ -270,7 +274,7 @@ class Hydrofabric(ABC):
         pass
 
     @abstractmethod
-    def get_catchment_by_id(self, catchment_id: str) -> Optional[Catchment]:
+    def get_catchment_by_id(self, catchment_id: str) -> Optional[C]:
         """
         Get the catchment object for the given id.
 
@@ -287,7 +291,7 @@ class Hydrofabric(ABC):
         pass
 
     @abstractmethod
-    def get_nexus_by_id(self, nexus_id: str) -> Optional[Nexus]:
+    def get_nexus_by_id(self, nexus_id: str) -> Optional[N]:
         """
         Get the nexus object for the given id.
 
