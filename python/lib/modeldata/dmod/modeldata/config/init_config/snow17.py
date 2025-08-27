@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from types import NoneType
 from typing import Optional, Self, Tuple
+from dmod.modeldata.hydrofabric.hydrofabric import HydrofabricCatchment
 
 from dmod.core.serializable_v2 import (Deserializer, SERIALIZABLE_AS_DICT, Serializer, SimpleSerializable,
                                        Validator, Validated, Interval, IntervalStringSerializer, from_namelist_str,
@@ -648,3 +649,96 @@ class Snow17FilesSerializer(Serializer[Snow17InitConfig, Tuple[Path, Path]]):
         self._params_file_path.write_text(params_str)
 
         return self._namelist_file_path, self._params_file_path
+
+
+class HydrofabricSnow17InitConfigGenerator(Deserializer[Snow17InitConfig, HydrofabricCatchment]):
+
+    __slots__ = ["_forcing_root", "_start", "_end", "_time_step_size", "_warm_start_run", "_write_states", "_validator"]
+
+    def __init__(self, forcing_root: Path, start: datetime, end: datetime, time_step_size: int = 3600,
+                 warm_start_run: bool = False, write_states: bool = False,
+                 validator: Optional[Validator[Snow17InitConfig]] = None):
+        """
+        Initialize, accepting certain general properties to insert into deserialized configs that are not in the
+        hydrofabric, as well as optionally a specific validator.
+
+        Parameters
+        ----------
+        forcing_root
+            The root to forcing files for the module to directly use.
+        start
+            The start datetime value in insert into deserialized configs; note that while other more precise info can
+            be included within the passed object, only the year, month, and day are used in the value inserted into
+            deserialized config objects.
+        end
+            The end datetime value in insert into deserialized configs; note that while other more precise info can
+            be included within the passed object, only the year, month, and day are used in the value inserted into
+            deserialized config objects.
+        time_step_size
+            The model time step size to use when inserting into deserialized configs; by default, 3600.
+        warm_start_run
+            Warm start run flag to insert into deserialized configs; by default, ``False``.
+        write_states
+            Write states flag to insert into deserialized configs; by default, ``False``.
+        validator
+            An optional validator to use after creating deserialized configs; if ``None`` (the default), the default
+            validator for the config instance will be used.
+        """
+        self._forcing_root = forcing_root
+        self._start = start
+        self._end = end
+        self._time_step_size = time_step_size
+        self._warm_start_run = warm_start_run
+        self._write_states = write_states
+        self._validator = validator
+
+    def deserialize(self, serialized_form: HydrofabricCatchment) -> Snow17InitConfig:
+        config = Snow17InitConfig(
+            catchment_id=serialized_form.id,
+            # Skipping n_hrus since that should always be 1
+            forcing_root=self._forcing_root,
+            output_root=None,
+            start_datehr=datetime(year=self._start.year, month=self._start.month, day=self._start.day,
+                                  hour=self._start.hour),
+            end_datehr=datetime(year=self._end.year, month=self._end.month, day=self._end.day, hour=self._end.hour),
+            model_timestep=self._time_step_size,
+            warm_start_run=self._warm_start_run,
+            write_states=self._write_states,
+            state_in_root=None,
+            state_out_root=None,
+            **self.get_catchment_specific_params(catchment_data_object=serialized_form)
+        )
+        try:
+            if self._validator is None:
+                config.run_default_validation()
+            else:
+                config.accept_validator(self._validator)
+            return config
+        except Validator.ValidationValueError as e:
+            raise Validator.ValidationValueError(
+                f"{self.__class__.__name__} unable extract valid {config.__class__.__name__} due to validation errors"
+            ) from e
+
+    def get_catchment_specific_params(self, catchment_data_object: HydrofabricCatchment) -> dict[str, float]:
+        """
+        Get dict of catchment-specific params using in deserializing a config object from the given catchment data.
+
+        Parameters
+        ----------
+        catchment_data_object
+            Object containing catchment-specific data from the hydrofabric.
+
+        Returns
+        -------
+        A dictionary catchment-specific params (keyed by param name) using in deserializing a config object from the
+        given catchment data.
+
+        See Also
+        --------
+        deserialize
+        """
+        return {
+            "catchment_area": catchment_data_object.area,
+            "latitude": catchment_data_object.latitude,
+            "elev": catchment_data_object.elevation
+        }
