@@ -9,6 +9,29 @@ from typing import Any, Callable, Dict, FrozenSet, List, Optional, Set, Tuple, U
 from ..subset import SubsetDefinition
 
 
+class HydrofabricCatchment(Catchment, ABC):
+    """
+    Abstract subclass of ::class:`Catchment` that provides easy access to certain metadata.
+    """
+
+    __slots__ = Catchment.__slots__
+
+    @property
+    @abstractmethod
+    def area(self) -> float:
+        pass
+
+    @property
+    @abstractmethod
+    def elevation(self) -> float:
+        pass
+
+    @property
+    @abstractmethod
+    def latitude(self) -> float:
+        pass
+
+
 class Hydrofabric(ABC):
 
     @classmethod
