@@ -9,7 +9,7 @@ from dmod.core.serializable_v2 import (Deserializer, SERIALIZABLE_AS_DICT, Seria
                                        from_param_txt_str, to_namelist_str, to_param_txt_str)
 
 
-@dataclass
+@dataclass(slots=True)
 class Snow17InitConfig(SimpleSerializable, Validated):
     """
     Representation of BMI init config for Snow17.
@@ -33,9 +33,11 @@ class Snow17InitConfig(SimpleSerializable, Validated):
     output_hrus: bool
         Whether Snow17 module should output HRU results.
     start_datehr: datetime
-        A start date and time for the simulation, though with precision down to the hour.
+        A start date and time for the simulation, though with precision down to the hour (provided args are stripped of
+        other components).
     end_datehr: datetime
-        An end date and time for the simulation, though with precision down to the hour.
+        An end date and time for the simulation, though with precision down to the hour (provided args are stripped of
+        other components).
     model_timestep: int
         The timestep size for the module to use, in seconds.
     state_in_root: Optional[Path]
@@ -117,16 +119,16 @@ class Snow17InitConfig(SimpleSerializable, Validated):
     write_states: bool = False
 
     scf: float = 1.1
-    mfmax: float = 1
+    mfmax: float = 1.0
     mfmin: float = 0.2
     uadj: float = 0.05
-    si: float = 500
-    pxtemp: float = 1
+    si: float = 500.0
+    pxtemp: float = 1.0
     nmf: float = 0.15
     tipm: float = 0.1
-    mbase: float = 0
+    mbase: float = 0.0
     plwhc: float = 0.03
-    daygm: float = 0
+    daygm: float = 0.0
     adc1: float = 0.05
     adc2: float = 0.1
     adc3: float = 0.2
@@ -142,6 +144,12 @@ class Snow17InitConfig(SimpleSerializable, Validated):
     @classmethod
     def get_default_deserializer_instance(cls) -> Deserializer[Self, SERIALIZABLE_AS_DICT]:
         return Snow17FileFormatDeserializer()
+
+    def __post_init__(self, *args, **kwargs):
+        self.start_datehr = datetime(year=self.start_datehr.year, month=self.start_datehr.month,
+                                     day=self.start_datehr.day, hour=self.start_datehr.hour)
+        self.end_datehr = datetime(year=self.end_datehr.year, month=self.end_datehr.month,
+                                   day=self.end_datehr.day, hour=self.end_datehr.hour)
 
     def get_default_validator_instance(self) -> Validator[Self]:
         return Snow17SimpleValidator()
@@ -314,6 +322,8 @@ class Snow17FileFormatDeserializer(Deserializer[Snow17InitConfig, SERIALIZABLE_A
 
     Note that this type does validate deserialized objects before returning them.
     """
+
+    __slots__ = ["_validator",]
 
     @classmethod
     def control_section_key(cls) -> str:
@@ -517,6 +527,8 @@ class Snow17FilesDeserializer(Deserializer[Snow17InitConfig, Tuple[Path, Path]])
     may also be useful in some cases.
     """
 
+    __slots__ = ["_validator", "_stricter_params_file_check"]
+
     def __init__(self, validator: Optional[Validator[Snow17InitConfig]] = None, strict_params_file_check: bool = False):
         """
         Initialize.
@@ -603,6 +615,9 @@ class Snow17FilesSerializer(Serializer[Snow17InitConfig, Tuple[Path, Path]]):
     """
     Serializer for Snow17 init config objects to params and namelist files, as used when running Snow17.
     """
+
+    __slots__ = ["_namelist_file_path", "_params_file_path"]
+
     def __init__(self, namelist_file_path: Path, params_file_path: Path):
         self._namelist_file_path = namelist_file_path.resolve()
         self._params_file_path = params_file_path.resolve()
