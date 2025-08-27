@@ -6,10 +6,10 @@ from typing import Optional, Self, Tuple
 
 from dmod.core.serializable_v2 import (Deserializer, SERIALIZABLE_AS_DICT, Serializer, SimpleSerializable,
                                        Validator, Validated, Interval, IntervalStringSerializer, from_namelist_str,
-                                       from_param_txt_str, to_namelist_str, to_param_txt_str)
+                                       from_param_txt_str, to_namelist_str, to_param_txt_str, O, T)
 
 
-@dataclass
+@dataclass(slots=True)
 class SacSmaInitConfig(SimpleSerializable, Validated):
     """
     Representation of BMI init config for Sac-SMA.
@@ -33,9 +33,11 @@ class SacSmaInitConfig(SimpleSerializable, Validated):
     output_hrus: bool
         Whether Sac-SMA module should output HRU results.
     start_datehr: datetime
-        A start date and time for the simulation, though with precision down to the hour.
+        A start date and time for the simulation, though with precision down to the hour (provided args are stripped of
+        other components).
     end_datehr: datetime
-        An end date and time for the simulation, though with precision down to the hour.
+        An end date and time for the simulation, though with precision down to the hour (provided args are stripped of
+        other components).
     model_timestep: int
         The timestep size for the module to use, in seconds.
     state_in_root: Optional[Path]
@@ -107,7 +109,7 @@ class SacSmaInitConfig(SimpleSerializable, Validated):
     uzk: float = 0.3
     lzpk: float = 0.01
     lzsk: float = 0.1
-    zperc: float = 100
+    zperc: float = 100.0
     rexp: float = 2.0
     pctim: float = 0.0
     pfree: float = 0.1
@@ -118,6 +120,12 @@ class SacSmaInitConfig(SimpleSerializable, Validated):
     @classmethod
     def get_default_deserializer_instance(cls) -> Deserializer[Self, SERIALIZABLE_AS_DICT]:
         return SacSmaFileFormatDeserializer()
+
+    def __post_init__(self, *args, **kwargs):
+        self.start_datehr = datetime(year=self.start_datehr.year, month=self.start_datehr.month,
+                                     day=self.start_datehr.day, hour=self.start_datehr.hour)
+        self.end_datehr = datetime(year=self.end_datehr.year, month=self.end_datehr.month,
+                                   day=self.end_datehr.day, hour=self.end_datehr.hour)
 
     @property
     def hru_id(self) -> str:
@@ -304,6 +312,8 @@ class SacSmaFileFormatDeserializer(Deserializer[SacSmaInitConfig, SERIALIZABLE_A
     Note that this type does validate deserialized objects before returning them.
     """
 
+    __slots__ = ["_validator"]
+
     @classmethod
     def control_section_key(cls) -> str:
         """
@@ -328,7 +338,7 @@ class SacSmaFileFormatDeserializer(Deserializer[SacSmaInitConfig, SERIALIZABLE_A
             Optional validator to use to validate before returning deserialized objects; if ``None`` (the default), a
             ::class:`SacSmaSimpleValidator` instance is created and used.
         """
-        self.__validator = validator if validator is not None else SacSmaSimpleValidator()
+        self._validator = validator if validator is not None else SacSmaSimpleValidator()
 
     def deserialize(self, serialized_form: SERIALIZABLE_AS_DICT) -> SacSmaInitConfig:
         """
@@ -399,8 +409,8 @@ class SacSmaFileFormatDeserializer(Deserializer[SacSmaInitConfig, SERIALIZABLE_A
             raise ValueError(f"Invalid Sac-SMA serialized init config: missing required key '{e.args[0]}'") from e
 
         try:
-            self.__validator.validate_types(config)
-            self.__validator.validate_values(config)
+            self._validator.validate_types(config)
+            self._validator.validate_values(config)
             return config
         except Validator.ValidationValueError as e:
             raise Validator.ValidationValueError(
@@ -494,6 +504,8 @@ class SacSmaFilesDeserializer(Deserializer[SacSmaInitConfig, Tuple[Path, Path]])
     may also be useful in some cases.
     """
 
+    slots = ["_validator", "_stricter_params_file_check"]
+
     def __init__(self, validator: Optional[Validator[SacSmaInitConfig]] = None, strict_params_file_check: bool = False):
         """
         Initialize.
@@ -508,8 +520,8 @@ class SacSmaFilesDeserializer(Deserializer[SacSmaInitConfig, Tuple[Path, Path]])
             (after calling ``resolve()``) contained within the namelist file; some false failures are possible depending
             on relative paths used and the current directory, so the default is ``False``.
         """
-        self.__validator = validator if validator is not None else SacSmaSimpleValidator()
-        self.__stricter_params_file_check = strict_params_file_check
+        self._validator = validator if validator is not None else SacSmaSimpleValidator()
+        self._stricter_params_file_check = strict_params_file_check
 
     def deserialize(self, serialized_form: Tuple[Path, Path]) -> SacSmaInitConfig:
         """
@@ -566,12 +578,12 @@ class SacSmaFilesDeserializer(Deserializer[SacSmaInitConfig, Tuple[Path, Path]])
             raise ValueError(f"Invalid Sac-SMA namelist file: wasn't configured with a params file path") from e
 
         # TODO: (later) might want to look at doing this differently
-        if self.__stricter_params_file_check and Path(config_params_file_str).resolve() != params_file.resolve():
+        if self._stricter_params_file_check and Path(config_params_file_str).resolve() != params_file.resolve():
             raise ValueError(f"Invalid Sac-SMA namelist file: configured/serialized params file "
                              f"'{config_params_file_str}' does not match params file '{params_file}' provided within "
                              f" deserialization arguments.")
 
-        initial_deserializer = SacSmaFileFormatDeserializer(validator=self.__validator)
+        initial_deserializer = SacSmaFileFormatDeserializer(validator=self._validator)
         return initial_deserializer.deserialize({"settings": controls_dict, "params": params_dict})
 
 
@@ -579,9 +591,12 @@ class SacSmaFilesSerializer(Serializer[SacSmaInitConfig, Tuple[Path, Path]]):
     """
     Serializer for Sac-SMA init config objects to params and namelist files, as used when running Sac-SMA.
     """
+
+    __slots__ = ["_namelist_file_path", "_params_file_path"]
+
     def __init__(self, namelist_file_path: Path, params_file_path: Path):
-        self.__namelist_file_path = namelist_file_path.resolve()
-        self.__params_file_path = params_file_path.resolve()
+        self._namelist_file_path = namelist_file_path.resolve()
+        self._params_file_path = params_file_path.resolve()
 
     def serialize(self, serializable: SacSmaInitConfig) -> Tuple[Path, Path]:
         """
@@ -601,12 +616,13 @@ class SacSmaFilesSerializer(Serializer[SacSmaInitConfig, Tuple[Path, Path]]):
         serial_dict = initial_serializer.serialize(serializable)
         # Inject the path for the params config into the namelist config details
         control_section_key = SacSmaFileFormatDeserializer.control_section_key()
-        serial_dict["settings"][control_section_key]["sac_param_file"] = str(self.__params_file_path)
+        serial_dict["settings"][control_section_key]["sac_param_file"] = str(self._params_file_path)
 
         namelist_str = to_namelist_str(serial_dict["settings"])
         params_str = to_param_txt_str(serial_dict["params"])
 
-        self.__namelist_file_path.write_text(namelist_str)
-        self.__params_file_path.write_text(params_str)
+        self._namelist_file_path.write_text(namelist_str)
+        self._params_file_path.write_text(params_str)
 
-        return self.__namelist_file_path, self.__params_file_path
+        return self._namelist_file_path, self._params_file_path
+
