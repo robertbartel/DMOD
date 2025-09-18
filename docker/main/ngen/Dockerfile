@@ -1030,10 +1030,19 @@ RUN dnf install -y diffutils valgrind cppcheck gdb gdb-gdbserver zstd \
     && mkdir /dmod/datasets/forcing \
     && mkdir /dmod/datasets/hydrofabric \
     && mkdir -p /dmod/datasets/hydrofabric/ex_geojson_hf_01 \
-    && cp -a /ngen/ngen/extern/t-route/test/input/geo/NWM_2.1_Sample_Datasets/Croton_NY_TEST1 /dmod/datasets/hydrofabric/ex_geojson_hf_01/Croton_NY_TEST1 \
+    # Work around these files perhaps not being present in other/later revisions of t-route \
+    #&& cp -a /ngen/ngen/extern/t-route/test/input/geo/NWM_2.1_Sample_Datasets/Croton_NY_TEST1 /dmod/datasets/hydrofabric/ex_geojson_hf_01/Croton_NY_TEST1 \
+    && git clone --single-branch --branch ngen https://github.com/NOAA-OWP/t-route.git ${WORKDIR}/troute_old_rev \
+    && pushd ${WORKDIR}/troute_old_rev \
+    && git checkout deded39 \
+    && cp -a ${WORKDIR}/troute_old_rev/test/input/geo/NWM_2.1_Sample_Datasets/Croton_NY_TEST1 /dmod/datasets/hydrofabric/ex_geojson_hf_01/Croton_NY_TEST1 \
+    && cp ${WORKDIR}/troute_old_rev/test/input/next_gen/*.json /dmod/datasets/hydrofabric/ex_geojson_hf_01/ \
+    && popd \
+    && rm -rf ${WORKDIR}/troute_old_rev \
     && cp   /ngen/ngen/data/catchment_data.geojson \
             /ngen/ngen/data/nexus_data.geojson \
-            /ngen/ngen/extern/t-route/test/input/next_gen/*.json  \
+            # Now handling this above where we manually checkout a specific commit of troute \
+            #/ngen/ngen/extern/t-route/test/input/next_gen/*.json  \
             /dmod/datasets/hydrofabric/ex_geojson_hf_01/ \
     && cp -a /ngen/ngen/data/forcing /dmod/datasets/forcing/test_forcing_01 \
     && chown -R ${USER}:${USER} /dmod/datasets/
