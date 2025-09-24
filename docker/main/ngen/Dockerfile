@@ -73,6 +73,8 @@ ARG ROCKY_NGEN_DEPS_REQUIRED="sudo gcc gcc-c++ make cmake tar git gcc-gfortran l
 # TODO: removed texinfo from list because it couldn't be found; make sure this doesn't lead to issues
 
 ARG BOOST_VERSION=1.82.0
+# A comma-separated list of compiled lib names passed to Boost bootstrap.sh's --with-libraries 
+ARG BOOST_COMPILED_LIBS
 #mpich 3.2 doesn't work well gfortran 11 it seems, an alignment error crops up, but 3.3.2 seems to work...
 ARG MPICH_VERSION="3.3.2"
 ARG MIN_PYTHON="3.8.0"
@@ -122,7 +124,7 @@ ARG NGEN_BMI_ACTIVE_SUBMODULES="iso_c_fortran_bmi noah-owp-modular topmodel cfe 
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for Rocky-Linux-based "base"
-FROM rockylinux:9.1 as rocky-base
+FROM rockylinux:9.1 AS rocky-base
 
 ARG USER=mpi
 ENV USER=${USER} USER_HOME=/home/${USER}
@@ -306,7 +308,7 @@ RUN if [[ "${NETCDF_CXX_VERSION}" == "latest" ]]; then \
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for just prior to "ngen-deps" for installing packaged deps
-FROM rocky-base as rocky-ngen-packaged-deps
+FROM rocky-base AS rocky-ngen-packaged-deps
 
 ARG ROCKY_NGEN_DEPS_REQUIRED
 
@@ -337,7 +339,7 @@ ENV FC=gfortran
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for building t-route in Rocky Linux environment
-FROM rocky-base as rocky_init_troute_repo
+FROM rocky-base AS rocky_init_troute_repo
 ARG TROUTE_REPO_URL
 ARG TROUTE_BRANCH
 ARG TROUTE_COMMIT
@@ -354,7 +356,7 @@ RUN cd ${WORKDIR} \
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for Rocky-Linux-based "ngen-deps"
-FROM rocky-ngen-packaged-deps as rocky-ngen-deps
+FROM rocky-ngen-packaged-deps AS rocky-ngen-deps
 
 ARG BOOST_VERSION
 ARG WORKDIR
@@ -384,6 +386,8 @@ ENV NETCDF_CXX_VERSION=${NETCDF_CXX_VERSION}
 ENV NETCDF_FORTRAN_VERSION=${NETCDF_FORTRAN_VERSION}
 
 ARG NGEN_WITH_ROUTING
+
+ARG BOOST_COMPILED_LIBS
 
 COPY --from=download_mpich /tmp/mpich-${MPICH_VERSION}.tar.gz /tmp/ngen-deps/mpich-${MPICH_VERSION}.tar.gz
 COPY --from=download_hd5 /tmp/hdf5-${HD5_VERSION}.tar.gz /tmp/ngen-deps/hdf5-${HD5_VERSION}.tar.gz
@@ -458,6 +462,17 @@ ENV CC=gcc
 # Get this for the times we need to install t-route
 COPY --from=rocky_init_troute_repo ${WORKDIR}/t-route/requirements.txt ${WORKDIR}/t-route-requirements.txt
 
+# Boost is only a compiled dependency for certain versions/variants of ngen (e.g., NGWPC)
+# But since there isn't a great way of determining exactly when (other than failing to build),
+# just always handle it here (and include serialization, which NGWPC needs).:
+RUN cd ${BOOST_ROOT} \
+    && tar -xf boost_tarball.blob --strip 1 \
+    && rm boost_tarball.blob \
+    &&  if [ -n "${BOOST_COMPILED_LIBS:-}" ]; then \
+            ./bootstrap.sh --prefix=/usr --with-libraries=serialization ; \
+            ./b2 install ; \
+        fi
+
 USER ${USER}
 
 # Set/pass provided C/C++ flags here for the rest of things
@@ -469,7 +484,7 @@ ENV CFLAGS=${NGEN_CFLAGS}
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for building framework in Rocky Linux environment
-FROM rocky-base as rocky_init_repo
+FROM rocky-base AS rocky_init_repo
 ARG REPO_URL
 ARG NGEN_BUILD_CONFIG_TYPE
 ARG BRANCH
@@ -498,7 +513,7 @@ RUN cd ${WORKDIR} \
 ################################################################################################################
 ################################################################################################################
 ###### Create intermediate Docker build stage for building t-route in Rocky Linux environment
-FROM rocky-ngen-deps as rocky_build_troute
+FROM rocky-ngen-deps AS rocky_build_troute
 
 ARG TROUTE_REPO_URL
 ARG TROUTE_BRANCH
@@ -536,7 +551,7 @@ USER ${USER}
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for building LGAR_C
-FROM rocky-ngen-deps as build_bmi_lgar_c
+FROM rocky-ngen-deps AS build_bmi_lgar_c
 
 ARG NGEN_BUILD_CONFIG_TYPE
 ARG LGAR_C_REPO_URL
@@ -569,7 +584,7 @@ RUN git clone \
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for building SoilFreezeThaw
-FROM rocky-ngen-deps as build_bmi_sft
+FROM rocky-ngen-deps AS build_bmi_sft
 
 ARG NGEN_BUILD_CONFIG_TYPE
 ARG SFT_REPO_URL
@@ -599,7 +614,7 @@ RUN git clone \
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for building SoilMoistureProfiles
-FROM rocky-ngen-deps as build_bmi_smp
+FROM rocky-ngen-deps AS build_bmi_smp
 
 ARG NGEN_BUILD_CONFIG_TYPE
 ARG SMP_REPO_URL
@@ -629,7 +644,7 @@ RUN git clone \
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for building ISO_C_BINDINGS for Fortran BMI modules
-FROM rocky-ngen-deps as pre_build_bmi_iso_c_fortran_dep
+FROM rocky-ngen-deps AS pre_build_bmi_iso_c_fortran_dep
 
 ARG NGEN_BUILD_CONFIG_TYPE
 
@@ -642,7 +657,7 @@ RUN cmake -B ./iso_c_fortran_bmi/cmake_build -DCMAKE_BUILD_TYPE=${NGEN_BUILD_CON
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for building Sac-SMA
-FROM rocky-ngen-deps as build_bmi_sac_sma
+FROM rocky-ngen-deps AS build_bmi_sac_sma
 
 ARG NGEN_BUILD_CONFIG_TYPE
 ARG SAC_SMA_REPO_URL
@@ -674,7 +689,7 @@ RUN mkdir ${WORKDIR}/sac-sma \
 ################################################################################################################
 ################################################################################################################
 ##### Create intermediate Docker build stage for building SNOW_17
-FROM rocky-ngen-deps as build_bmi_snow_17
+FROM rocky-ngen-deps AS build_bmi_snow_17
 
 ARG NGEN_BUILD_CONFIG_TYPE
 ARG SNOW_17_REPO_URL
@@ -759,10 +774,7 @@ ENV VIRTUAL_ENV=/dmod/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN python3 -m venv $VIRTUAL_ENV && pip3 install numpy
 
-RUN cd ${BOOST_ROOT} \
-    && tar -xf boost_tarball.blob --strip 1 \
-    && rm boost_tarball.blob \
-    && cd ${WORKDIR}/ngen \
+RUN cd ${WORKDIR}/ngen \
     &&  if [ -z "${COMMIT:-}" ]; then \
             if [ "${REFRESH_BEFORE_BUILD:-}" = "true" ] ; then  \
                 git fetch ; \
@@ -846,7 +858,8 @@ RUN cd ${BOOST_ROOT} \
                 $BUILD_DIR/test/test_bmi_multi; \
             fi ; \
     done \
-    && rm -rf ${BOOST_ROOT} \
+    # This seems to be problematic once we start using compiled Boost libs \
+    #&& rm -rf ${BOOST_ROOT} \
     && mkdir -p /dmod/bin \
     && chown ${USER} /dmod/bin \
     && mkdir -p /dmod/shared_libs \
@@ -870,7 +883,7 @@ ENV PATH=${WORKDIR}:${WORKDIR}/bin:/dmod/bin:$PATH
 ################################################################################################################
 ################################################################################################################
 ##### A build stage for the partitioner utility image
-FROM rocky-ngen-deps as partitioner_image
+FROM rocky-ngen-deps AS partitioner_image
 
 ARG BUILD_PARALLEL_JOBS
 ARG COMMIT
@@ -937,7 +950,7 @@ ENTRYPOINT ["entrypoint.sh"]
 ################################################################################################################
 ################################################################################################################
 ##### User customization build stage
-FROM rocky_build_ngen as build_customizations
+FROM rocky_build_ngen AS build_customizations
 
 ARG WORKDIR
 ARG NGEN_BUILD_CONFIG_TYPE
@@ -982,7 +995,7 @@ USER ${USER}
 ################################################################################################################
 ################################################################################################################
 ##### A build stage for testing using the ngen-build-test image
-FROM build_customizations as rocky_ngen_build_testing
+FROM build_customizations AS rocky_ngen_build_testing
 #FROM rocky-ngen-deps as rocky_ngen_build_testing
 #FROM rocky_build_ngen as rocky_ngen_build_testing
 #FROM ${DOCKER_INTERNAL_REGISTRY}/ngen-deps:latest as rocky_ngen_build_testing
@@ -1019,12 +1032,12 @@ FROM build_customizations AS ngen_qa_deps
 # TODO: look at separating things out into individual images a little better, especially the debuginfo-install stuff
 USER root
 RUN dnf install -y diffutils valgrind cppcheck gdb gdb-gdbserver zstd \
-    && dnf debuginfo-install -y \
-            bzip2-libs-1.0.8-10.el9_5.x86_64 expat-2.5.0-3.el9_5.3.x86_64 glibc-2.34-125.el9_5.8.x86_64 \
-            libffi-3.4.2-8.el9.x86_64 libgcc-11.5.0-5.el9_5.x86_64 libgfortran-11.5.0-5.el9_5.x86_64 \
-            libquadmath-11.5.0-5.el9_5.x86_64 libstdc++-11.5.0-5.el9_5.x86_64 libuuid-2.37.4-20.el9.x86_64 \
-            openssl-libs-3.2.2-6.el9_5.1.x86_64 python3-libs-3.9.21-1.el9_5.x86_64 sqlite-libs-3.34.1-7.el9_3.x86_64 \
-            udunits2-2.2.28-5.el9.x86_64 xz-libs-5.2.5-8.el9_0.x86_64 zlib-1.2.11-40.el9.x86_64 \
+    #&& dnf debuginfo-install -y \
+    #        bzip2-libs-1.0.8-10.el9_5.x86_64 expat-2.5.0-3.el9_5.3.x86_64 glibc-2.34-125.el9_5.8.x86_64 \
+    #        libffi-3.4.2-8.el9.x86_64 libgcc-11.5.0-5.el9_5.x86_64 libgfortran-11.5.0-5.el9_5.x86_64 \
+    #        libquadmath-11.5.0-5.el9_5.x86_64 libstdc++-11.5.0-5.el9_5.x86_64 libuuid-2.37.4-20.el9.x86_64 \
+    #        openssl-libs-3.2.2-6.el9_5.1.x86_64 python3-libs-3.9.21-1.el9_5.x86_64 sqlite-libs-3.34.1-7.el9_3.x86_64 \
+    #        udunits2-2.2.28-5.el9.x86_64 xz-libs-5.2.5-8.el9_0.x86_64 zlib-1.2.11-40.el9.x86_64 \
     && dnf -y clean all \
     && mkdir /dmod/datasets/config \
     && mkdir /dmod/datasets/forcing \
@@ -1153,10 +1166,10 @@ ENTRYPOINT ["/dmod/qa/run_cppcheck.sh"]
 ##### General software QA/analysis image build stage
 FROM ngen_qa_deps AS ngen_qa
 
-USER root
-RUN dnf -y debuginfo-install expat-2.5.0-3.el9_5.3.x86_64 glibc-2.34-125.el9_5.8.x86_64 python3-libs-3.9.21-1.el9_5.x86_64 \
-    && dnf -y clean all
-USER ${USER}
+#USER root
+#RUN dnf -y debuginfo-install expat-2.5.0-3.el9_5.3.x86_64 glibc-2.34-125.el9_5.8.x86_64 python3-libs-3.9.21-1.el9_5.x86_64 \
+#    && dnf -y clean all
+#USER ${USER}
 
 # TODO: consider whether you should change this
 ENTRYPOINT ["/bin/bash"]
