@@ -50,6 +50,7 @@ services:
       target: rocky-ngen-deps
       args:
         DOCKER_INTERNAL_REGISTRY: ${DOCKER_INTERNAL_REGISTRY:?}
+        BOOST_COMPILED_LIBS: ${BOOST_COMPILED_LIBS:-}
     #depends_on:
     #  - base
 
@@ -62,6 +63,7 @@ services:
         REPO_URL: ${NGEN_REPO_URL?No NGen repo url configured}
         BRANCH: ${NGEN_BRANCH?No NGen branch configured}
         COMMIT: ${NGEN_COMMIT}
+        BOOST_COMPILED_LIBS: ${BOOST_COMPILED_LIBS:-}
         TROUTE_REPO_URL: ${TROUTE_REPO_URL:-https://github.com/NOAA-OWP/t-route}
         TROUTE_BRANCH: ${TROUTE_BRANCH:-master}
         TROUTE_COMMIT: ${TROUTE_COMMIT}
@@ -80,6 +82,7 @@ services:
         REPO_URL: ${NGEN_REPO_URL?No NGen repo url configured}
         BRANCH: ${NGEN_BRANCH?No NGen branch configured}
         COMMIT: ${NGEN_COMMIT}
+        BOOST_COMPILED_LIBS: ${BOOST_COMPILED_LIBS:-}
         TROUTE_REPO_URL: ${TROUTE_REPO_URL:-https://github.com/NOAA-OWP/t-route}
         TROUTE_BRANCH: ${TROUTE_BRANCH:-master}
         TROUTE_COMMIT: ${TROUTE_COMMIT}
@@ -101,6 +104,7 @@ services:
         REPO_URL: ${NGEN_REPO_URL?No NGen repo url configured}
         BRANCH: ${NGEN_BRANCH?No NGen branch configured}
         COMMIT: ${NGEN_COMMIT}
+        BOOST_COMPILED_LIBS: ${BOOST_COMPILED_LIBS:-}
         TROUTE_REPO_URL: ${TROUTE_REPO_URL:-https://github.com/NOAA-OWP/t-route}
         TROUTE_BRANCH: ${TROUTE_BRANCH:-master}
         TROUTE_COMMIT: ${TROUTE_COMMIT}
@@ -125,6 +129,7 @@ services:
         REPO_URL: ${NGEN_REPO_URL?No NGen repo url configured}
         BRANCH: ${NGEN_BRANCH?No NGen branch configured}
         COMMIT: ${NGEN_COMMIT}
+        BOOST_COMPILED_LIBS: ${BOOST_COMPILED_LIBS:-}
         TROUTE_REPO_URL: ${TROUTE_REPO_URL:-https://github.com/NOAA-OWP/t-route}
         TROUTE_BRANCH: ${TROUTE_BRANCH:-master}
         TROUTE_COMMIT: ${TROUTE_COMMIT}
@@ -151,6 +156,7 @@ services:
         REPO_URL: ${NGEN_REPO_URL?No NGen repo url configured}
         BRANCH: ${NGEN_BRANCH?No NGen branch configured}
         COMMIT: ${NGEN_COMMIT}
+        BOOST_COMPILED_LIBS: ${BOOST_COMPILED_LIBS:-}
         TROUTE_REPO_URL: ${TROUTE_REPO_URL:-https://github.com/NOAA-OWP/t-route}
         TROUTE_BRANCH: ${TROUTE_BRANCH:-master}
         TROUTE_COMMIT: ${TROUTE_COMMIT}
@@ -177,6 +183,7 @@ services:
         REPO_URL: ${NGEN_REPO_URL?No NGen repo url configured}
         BRANCH: ${NGEN_BRANCH?No NGen branch configured}
         COMMIT: ${NGEN_COMMIT}
+        BOOST_COMPILED_LIBS: ${BOOST_COMPILED_LIBS:-}
         BUILD_PARALLEL_JOBS: ${NGEN_BUILD_PARALLEL_JOBS:-2}
         REFRESH_BEFORE_BUILD: ${NGEN_REFRESH_BEFORE_BUILD:-true}
         DOCKER_INTERNAL_REGISTRY: ${DOCKER_INTERNAL_REGISTRY:?}
@@ -193,6 +200,7 @@ services:
         REPO_URL: ${NGEN_REPO_URL?No NGen repo url configured}
         BRANCH: ${NGEN_BRANCH?No NGen branch configured}
         COMMIT: ${NGEN_COMMIT}
+        BOOST_COMPILED_LIBS: ${BOOST_COMPILED_LIBS:-}
         NGEN_CAL_BRANCH: ${NGEN_CAL_BRANCH:-master}
         NGEN_CAL_COMMIT: ${NGEN_CAL_COMMIT}
         TROUTE_REPO_URL: ${TROUTE_REPO_URL:-https://github.com/NOAA-OWP/t-route}
