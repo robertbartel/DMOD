@@ -86,6 +86,21 @@ services:
         TROUTE_REPO_URL: ${TROUTE_REPO_URL:-https://github.com/NOAA-OWP/t-route}
         TROUTE_BRANCH: ${TROUTE_BRANCH:-master}
         TROUTE_COMMIT: ${TROUTE_COMMIT}
+        LGAR_C_REPO_URL: ${LGAR_C_REPO_URL:-https://github.com/NOAA-OWP/LGAR-C.git}
+        LGAR_C_BRANCH: ${LGAR_C_BRANCH:-master}
+        LGAR_C_COMMIT: ${LGAR_C_COMMIT}
+        SAC_SMA_REPO_URL: ${SAC_SMA_REPO_URL:-https://github.com/NOAA-OWP/sac-sma.git}
+        SAC_SMA_BRANCH: ${SAC_SMA_BRANCH:-master}
+        SAC_SMA_COMMIT: ${SAC_SMA_COMMIT}
+        SNOW_17_REPO_URL: ${SNOW_17_REPO_URL:-https://github.com/NOAA-OWP/snow17.git}
+        SNOW_17_BRANCH: ${SNOW_17_BRANCH:-master}
+        SNOW_17_COMMIT: ${SNOW_17_COMMIT}
+        SFT_REPO_URL: ${SFT_REPO_URL:-https://github.com/NOAA-OWP/SoilFreezeThaw.git}
+        SFT_BRANCH: ${SFT_BRANCH:-master}
+        SFT_COMMIT: ${SFT_COMMIT}
+        SMP_REPO_URL: ${SMP_REPO_URL:-https://github.com/NOAA-OWP/SoilMoistureProfiles.git}
+        SMP_BRANCH: ${SMP_BRANCH:-main}
+        SMP_COMMIT: ${SMP_COMMIT}
         BUILD_PARALLEL_JOBS: ${NGEN_BUILD_PARALLEL_JOBS:-2}
         REFRESH_BEFORE_BUILD: ${NGEN_REFRESH_BEFORE_BUILD:-true}
         DOCKER_INTERNAL_REGISTRY: ${DOCKER_INTERNAL_REGISTRY:?}
@@ -108,6 +123,21 @@ services:
         TROUTE_REPO_URL: ${TROUTE_REPO_URL:-https://github.com/NOAA-OWP/t-route}
         TROUTE_BRANCH: ${TROUTE_BRANCH:-master}
         TROUTE_COMMIT: ${TROUTE_COMMIT}
+        LGAR_C_REPO_URL: ${LGAR_C_REPO_URL:-https://github.com/NOAA-OWP/LGAR-C.git}
+        LGAR_C_BRANCH: ${LGAR_C_BRANCH:-master}
+        LGAR_C_COMMIT: ${LGAR_C_COMMIT}
+        SAC_SMA_REPO_URL: ${SAC_SMA_REPO_URL:-https://github.com/NOAA-OWP/sac-sma.git}
+        SAC_SMA_BRANCH: ${SAC_SMA_BRANCH:-master}
+        SAC_SMA_COMMIT: ${SAC_SMA_COMMIT}
+        SNOW_17_REPO_URL: ${SNOW_17_REPO_URL:-https://github.com/NOAA-OWP/snow17.git}
+        SNOW_17_BRANCH: ${SNOW_17_BRANCH:-master}
+        SNOW_17_COMMIT: ${SNOW_17_COMMIT}
+        SFT_REPO_URL: ${SFT_REPO_URL:-https://github.com/NOAA-OWP/SoilFreezeThaw.git}
+        SFT_BRANCH: ${SFT_BRANCH:-master}
+        SFT_COMMIT: ${SFT_COMMIT}
+        SMP_REPO_URL: ${SMP_REPO_URL:-https://github.com/NOAA-OWP/SoilMoistureProfiles.git}
+        SMP_BRANCH: ${SMP_BRANCH:-main}
+        SMP_COMMIT: ${SMP_COMMIT}
         BUILD_PARALLEL_JOBS: ${NGEN_BUILD_PARALLEL_JOBS:-2}
         REFRESH_BEFORE_BUILD: ${NGEN_REFRESH_BEFORE_BUILD:-true}
         DOCKER_INTERNAL_REGISTRY: ${DOCKER_INTERNAL_REGISTRY:?}
@@ -133,6 +163,21 @@ services:
         TROUTE_REPO_URL: ${TROUTE_REPO_URL:-https://github.com/NOAA-OWP/t-route}
         TROUTE_BRANCH: ${TROUTE_BRANCH:-master}
         TROUTE_COMMIT: ${TROUTE_COMMIT}
+        LGAR_C_REPO_URL: ${LGAR_C_REPO_URL:-https://github.com/NOAA-OWP/LGAR-C.git}
+        LGAR_C_BRANCH: ${LGAR_C_BRANCH:-master}
+        LGAR_C_COMMIT: ${LGAR_C_COMMIT}
+        SAC_SMA_REPO_URL: ${SAC_SMA_REPO_URL:-https://github.com/NOAA-OWP/sac-sma.git}
+        SAC_SMA_BRANCH: ${SAC_SMA_BRANCH:-master}
+        SAC_SMA_COMMIT: ${SAC_SMA_COMMIT}
+        SNOW_17_REPO_URL: ${SNOW_17_REPO_URL:-https://github.com/NOAA-OWP/snow17.git}
+        SNOW_17_BRANCH: ${SNOW_17_BRANCH:-master}
+        SNOW_17_COMMIT: ${SNOW_17_COMMIT}
+        SFT_REPO_URL: ${SFT_REPO_URL:-https://github.com/NOAA-OWP/SoilFreezeThaw.git}
+        SFT_BRANCH: ${SFT_BRANCH:-master}
+        SFT_COMMIT: ${SFT_COMMIT}
+        SMP_REPO_URL: ${SMP_REPO_URL:-https://github.com/NOAA-OWP/SoilMoistureProfiles.git}
+        SMP_BRANCH: ${SMP_BRANCH:-main}
+        SMP_COMMIT: ${SMP_COMMIT}
         BUILD_PARALLEL_JOBS: ${NGEN_BUILD_PARALLEL_JOBS:-2}
         REFRESH_BEFORE_BUILD: ${NGEN_REFRESH_BEFORE_BUILD:-true}
         DOCKER_INTERNAL_REGISTRY: ${DOCKER_INTERNAL_REGISTRY:?}
@@ -160,6 +205,21 @@ services:
         TROUTE_REPO_URL: ${TROUTE_REPO_URL:-https://github.com/NOAA-OWP/t-route}
         TROUTE_BRANCH: ${TROUTE_BRANCH:-master}
         TROUTE_COMMIT: ${TROUTE_COMMIT}
+        LGAR_C_REPO_URL: ${LGAR_C_REPO_URL:-https://github.com/NOAA-OWP/LGAR-C.git}
+        LGAR_C_BRANCH: ${LGAR_C_BRANCH:-master}
+        LGAR_C_COMMIT: ${LGAR_C_COMMIT}
+        SAC_SMA_REPO_URL: ${SAC_SMA_REPO_URL:-https://github.com/NOAA-OWP/sac-sma.git}
+        SAC_SMA_BRANCH: ${SAC_SMA_BRANCH:-master}
+        SAC_SMA_COMMIT: ${SAC_SMA_COMMIT}
+        SNOW_17_REPO_URL: ${SNOW_17_REPO_URL:-https://github.com/NOAA-OWP/snow17.git}
+        SNOW_17_BRANCH: ${SNOW_17_BRANCH:-master}
+        SNOW_17_COMMIT: ${SNOW_17_COMMIT}
+        SFT_REPO_URL: ${SFT_REPO_URL:-https://github.com/NOAA-OWP/SoilFreezeThaw.git}
+        SFT_BRANCH: ${SFT_BRANCH:-master}
+        SFT_COMMIT: ${SFT_COMMIT}
+        SMP_REPO_URL: ${SMP_REPO_URL:-https://github.com/NOAA-OWP/SoilMoistureProfiles.git}
+        SMP_BRANCH: ${SMP_BRANCH:-main}
+        SMP_COMMIT: ${SMP_COMMIT}
         BUILD_PARALLEL_JOBS: ${NGEN_BUILD_PARALLEL_JOBS:-2}
         REFRESH_BEFORE_BUILD: ${NGEN_REFRESH_BEFORE_BUILD:-true}
         DOCKER_INTERNAL_REGISTRY: ${DOCKER_INTERNAL_REGISTRY:?}
@@ -206,6 +266,21 @@ services:
         TROUTE_REPO_URL: ${TROUTE_REPO_URL:-https://github.com/NOAA-OWP/t-route}
         TROUTE_BRANCH: ${TROUTE_BRANCH:-master}
         TROUTE_COMMIT: ${TROUTE_COMMIT}
+        LGAR_C_REPO_URL: ${LGAR_C_REPO_URL:-https://github.com/NOAA-OWP/LGAR-C.git}
+        LGAR_C_BRANCH: ${LGAR_C_BRANCH:-master}
+        LGAR_C_COMMIT: ${LGAR_C_COMMIT}
+        SAC_SMA_REPO_URL: ${SAC_SMA_REPO_URL:-https://github.com/NOAA-OWP/sac-sma.git}
+        SAC_SMA_BRANCH: ${SAC_SMA_BRANCH:-master}
+        SAC_SMA_COMMIT: ${SAC_SMA_COMMIT}
+        SNOW_17_REPO_URL: ${SNOW_17_REPO_URL:-https://github.com/NOAA-OWP/snow17.git}
+        SNOW_17_BRANCH: ${SNOW_17_BRANCH:-master}
+        SNOW_17_COMMIT: ${SNOW_17_COMMIT}
+        SFT_REPO_URL: ${SFT_REPO_URL:-https://github.com/NOAA-OWP/SoilFreezeThaw.git}
+        SFT_BRANCH: ${SFT_BRANCH:-master}
+        SFT_COMMIT: ${SFT_COMMIT}
+        SMP_REPO_URL: ${SMP_REPO_URL:-https://github.com/NOAA-OWP/SoilMoistureProfiles.git}
+        SMP_BRANCH: ${SMP_BRANCH:-main}
+        SMP_COMMIT: ${SMP_COMMIT}
         BUILD_PARALLEL_JOBS: ${NGEN_BUILD_PARALLEL_JOBS:-2}
         REFRESH_BEFORE_BUILD: ${NGEN_REFRESH_BEFORE_BUILD:-true}
         DOCKER_INTERNAL_REGISTRY: ${DOCKER_INTERNAL_REGISTRY:?}
