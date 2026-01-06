@@ -23,7 +23,8 @@ OUTPUT_DIR_PARENT: Path = Path("/dmod/datasets/output")
 
 
 def exec_checks(directory: Path, output_dir: Path, cpp_std: str = "c++14", os_platform: str = "unix64",
-                enabled_checks: str = "performance,portability,missingInclude", use_xml: bool = True) -> bool:
+                #enabled_checks: str = "performance,portability,missingInclude", use_xml: bool = True) -> bool:
+                enabled_checks: str = "all", use_xml: bool = True) -> bool:
     """
     Execute CppCheck and run checks on the code in the given directory.
 
@@ -97,10 +98,13 @@ def main():
 
     if USER_SOURCES_DIR.is_dir():
         logger.info(f"Linking or extracting user-provided sources within '{USER_SOURCES_DIR!s}' to '{SOURCES_DIR!s}'")
+        logger.info(f"(Skipping contents of '{C_CPP_SOURCES_DIR!s}')")
         for item in USER_SOURCES_DIR.iterdir():
             link_or_extract_source(item=item, dest_dir=SOURCES_DIR, logger=logger)
     # By default, link sources under /dmod/qa/c_cpp_sources to analog under /dmod/qa/sources
     else:
+        logger.info(f"Falling back to default sources dir, since user-provided sources dir doesn't exists at "
+                    f"path '{USER_SOURCES_DIR!s}'")
         logger.info(f"Linking default C/C++ sources within '{C_CPP_SOURCES_DIR!s}' to '{SOURCES_DIR!s}'")
         for default_item in C_CPP_SOURCES_DIR.iterdir():
             link_or_extract_source(item=default_item, dest_dir=SOURCES_DIR, logger=logger)
